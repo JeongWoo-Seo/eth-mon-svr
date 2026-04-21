@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	ServerPort string `mapstructure:"SERVER_PORT"`
-	EthRpcUrl  string `mapstructure:"ETH_RPC_URL"`
+	ServerPort    string `mapstructure:"SERVER_PORT"`
+	EthRpcHttpUrl string `mapstructure:"ETH_RPC_HTTP_URL"`
+	EthRpcWsUrl   string `mapstructure:"ETH_RPC_WS_URL"`
 }
 
 func LoadConfig() *Config {
