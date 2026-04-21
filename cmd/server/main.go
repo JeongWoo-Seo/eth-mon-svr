@@ -5,12 +5,13 @@ import (
 	"log"
 	"time"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 func main() {
-	url := "https://ethereum-sepolia-rpc.publicnode.com"
-	client, err := ethclient.Dial(url)
+	cfg := config.LoadConfig()
+	client, err := ethclient.Dial(cfg.EthRpcUrl)
 	if err != nil {
 		log.Fatalf("can not connect eth: %v", err)
 	}
