@@ -3,10 +3,10 @@ package eth
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
 	"time"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -18,7 +18,7 @@ type Client struct {
 func NewEthClient(url string) (*Client, error) {
 	client, err := ethclient.Dial(url)
 	if err != nil {
-		return nil, fmt.Errorf("%v: %w", ErrConnectEthNode, err)
+		return nil, fmt.Errorf("%w: %s", ErrEthDial, url)
 	}
 
 	return &Client{EthClient: client}, nil
@@ -26,27 +26,50 @@ func NewEthClient(url string) (*Client, error) {
 
 func (c *Client) WatchHeaders(ctx context.Context, url string, ch chan<- *types.Header) {
 	for {
+		// 1. eth header 구독
 		sub, err := c.EthClient.SubscribeNewHead(ctx, ch)
 		if err != nil {
-			log.Printf("failed to subscribe and reconnect after 5s: %v")
-			time.Sleep(5 * time.Second)
-			newClient, diarErr := ethclient.Dial(url)
-			if diarErr == nil {
-				c.EthClient = newClient
+			logger.Error(ctx, ErrEthSubscribe.Error(),
+				err,
+				"event", "eth_newHeads",
+				"action", "subscribe",
+				"retry", true,
+				"retry_after", 5*time.Second,
+			)
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+				newClient, diarErr := ethclient.Dial(url)
+				if diarErr == nil {
+					c.EthClient.Close()
+					c.EthClient = newClient
+				}
 			}
 			continue
 		}
 
-		log.Println("subscribe eth")
+		logger.Info(ctx, "ethereum subscription established",
+			"event", "eth_newHeads",
+			"status", "success",
+		)
 
+		// 2. 오류 발생시 기존 구독을 끊기
 	waitLoop:
 		for {
 			select {
 			case <-ctx.Done():
 				sub.Unsubscribe()
-				break
+				return
 			case err := <-sub.Err():
-				log.Printf("eth subscribe disconnect: %v", err)
+				logger.Warn(ctx, "eth subscription disconnected",
+					err,
+					"system", "ethereum",
+					"event", "newHeads",
+					"action", "subscribe",
+					"retry", true,
+				)
 				sub.Unsubscribe()
 				break waitLoop
 			}
@@ -58,7 +81,7 @@ func (c *Client) WatchHeaders(ctx context.Context, url string, ch chan<- *types.
 func (c *Client) GetSuggestGasPrice(ctx context.Context) (*big.Int, error) {
 	price, err := c.EthClient.SuggestGasPrice(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%v: %w", ErrGetSuggestGas, err)
+		return nil, fmt.Errorf("%w: %v", ErrEthSuggestGasPrice, err)
 	}
 
 	return price, nil

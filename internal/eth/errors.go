@@ -3,7 +3,7 @@ package eth
 import "errors"
 
 var (
-	ErrConnectEthNode       = errors.New("failed to connect eth node")
-	ErrEthNewHeaderSubscibe = errors.New("failed to subscribe")
-	ErrGetSuggestGas        = errors.New("failed to get suggest gas price")
+	ErrEthDial            = errors.New("ethereum dial failed")
+	ErrEthSubscribe       = errors.New("ethereum subscription failed")
+	ErrEthSuggestGasPrice = errors.New("failed to get suggest gas price")
 )

@@ -2,31 +2,53 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/eth"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
 func main() {
+	ctx := context.Background()
 	cfg := config.LoadConfig()
+
+	logger.New(logger.Config{
+		Service: cfg.Service,
+		Env:     cfg.Env,
+		Level:   slog.LevelInfo,
+	})
 
 	ethClient, err := eth.NewEthClient(cfg.EthRpcWsUrl)
 	if err != nil {
-		log.Fatalf("connection failed: %v", err)
+		logger.Error(ctx, "failed to connect ethereum rpc",
+			err,
+			"system", "ethereum",
+			"action", "connect",
+			"rpc", cfg.EthRpcWsUrl,
+		)
+		os.Exit(1)
 	}
 	defer ethClient.Close()
 
-	log.Printf("eth connect successfully")
+	logger.Info(ctx, "ethereum connected",
+		slog.String("system", "ethereum"),
+		slog.String("action", "connect"),
+	)
 
 	headerChan := make(chan *types.Header)
-	go ethClient.WatchHeaders(context.Background(), cfg.EthRpcWsUrl, headerChan)
+	go ethClient.WatchHeaders(ctx, cfg.EthRpcWsUrl, headerChan)
 
 	for {
 		select {
 		case header := <-headerChan:
-			log.Printf("📦 새 블록 수신: #%d", header.Number.Uint64())
+			logger.Info(ctx, "new block received",
+				slog.String("system", "ethereum"),
+				slog.String("event", "block_watch"),
+				slog.Uint64("block_number", header.Number.Uint64()),
+			)
 		}
 	}
 }
