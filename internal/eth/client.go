@@ -39,6 +39,7 @@ func (c *Client) WatchHeaders(ctx context.Context, url string, ch chan<- *types.
 
 			select {
 			case <-ctx.Done():
+				sub.Unsubscribe()
 				return
 			case <-time.After(5 * time.Second):
 				newClient, diarErr := ethclient.Dial(url)
@@ -66,7 +67,58 @@ func (c *Client) WatchHeaders(ctx context.Context, url string, ch chan<- *types.
 				logger.Warn(ctx, "eth subscription disconnected",
 					err,
 					"system", "ethereum",
-					"event", "newHeads",
+					"event", "eth_newHeads",
+					"action", "subscribe",
+					"retry", true,
+				)
+				sub.Unsubscribe()
+				break waitLoop
+			}
+		}
+	}
+}
+
+func (c *Client) WatchPendingTransactions(ctx context.Context, url string, ch chan<- string) {
+	for {
+		sub, err := c.EthClient.Client().EthSubscribe(ctx, ch, "newPendingTransactions")
+		if err != nil {
+			logger.Error(ctx, ErrEthSubscribe.Error(),
+				err,
+				"event", "eth_newPendingTransactions",
+				"action", "subscribe",
+				"retry", true,
+			)
+
+			select {
+			case <-ctx.Done():
+				sub.Unsubscribe()
+				return
+			case <-time.After(5 * time.Second):
+				newClient, diarErr := ethclient.Dial(url)
+				if diarErr == nil {
+					c.EthClient.Close()
+					c.EthClient = newClient
+				}
+			}
+			continue
+		}
+
+		logger.Info(ctx, "newPendingTransactions subscription established",
+			"event", "eth_newPendingTransactions",
+			"status", "success",
+		)
+
+	waitLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				sub.Unsubscribe()
+				return
+			case err := <-sub.Err():
+				logger.Warn(ctx, "eth subscription disconnected",
+					err,
+					"system", "ethereum",
+					"event", "eth_newPendingTransactions",
 					"action", "subscribe",
 					"retry", true,
 				)

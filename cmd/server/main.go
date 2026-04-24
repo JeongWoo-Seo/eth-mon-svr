@@ -27,7 +27,6 @@ func main() {
 			err,
 			"system", "ethereum",
 			"action", "connect",
-			"rpc", cfg.EthRpcWsUrl,
 		)
 		os.Exit(1)
 	}
@@ -39,7 +38,9 @@ func main() {
 	)
 
 	headerChan := make(chan *types.Header)
+	txHashChan := make(chan string)
 	go ethClient.WatchHeaders(ctx, cfg.EthRpcWsUrl, headerChan)
+	go ethClient.WatchPendingTransactions(ctx, cfg.EthRpcWsUrl, txHashChan)
 
 	for {
 		select {
@@ -48,6 +49,13 @@ func main() {
 				slog.String("system", "ethereum"),
 				slog.String("event", "block_watch"),
 				slog.Uint64("block_number", header.Number.Uint64()),
+			)
+
+		case txHash := <-txHashChan:
+			logger.Info(ctx, "new pending transaction received",
+				slog.String("system", "ethereum"),
+				slog.String("event", "pending_transaction_watch"),
+				slog.String("tx_hash", txHash),
 			)
 		}
 	}
