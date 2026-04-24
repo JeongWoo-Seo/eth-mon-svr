@@ -25,7 +25,7 @@ func NewState() *State {
 		data: make(map[string]TxState),
 	}
 
-	s.cleaner()
+	go s.cleaner()
 
 	return s
 }
@@ -50,7 +50,6 @@ func (s *State) Upset(tx *types.Transaction) {
 	} else {
 		s.data[key] = state
 	}
-
 }
 
 func (s *State) cleaner() {

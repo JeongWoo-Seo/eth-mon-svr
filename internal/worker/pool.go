@@ -42,3 +42,7 @@ func (p *Pool) worker(ctx context.Context) {
 		p.proc.GetTxInfo(common.HexToHash(hash))
 	}
 }
+
+func (p *Pool) Input() chan<- string {
+	return p.jobs
+}

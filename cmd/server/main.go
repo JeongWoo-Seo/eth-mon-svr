@@ -8,6 +8,9 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/eth"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/processor"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/worker"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -37,8 +40,13 @@ func main() {
 		slog.String("action", "connect"),
 	)
 
+	state := mempool.NewState()
+	proc := processor.NewProcess(state, ethClient.EthClient)
+	pool := worker.NewPool(50, proc)
+	pool.Start(ctx)
+
 	headerChan := make(chan *types.Header)
-	txHashChan := make(chan string)
+	txHashChan := make(chan string, 1000)
 	go ethClient.WatchHeaders(ctx, cfg.EthRpcWsUrl, headerChan)
 	go ethClient.WatchPendingTransactions(ctx, cfg.EthRpcWsUrl, txHashChan)
 
@@ -52,6 +60,7 @@ func main() {
 			)
 
 		case txHash := <-txHashChan:
+			pool.Input() <- txHash
 			logger.Info(ctx, "new pending transaction received",
 				slog.String("system", "ethereum"),
 				slog.String("event", "pending_transaction_watch"),

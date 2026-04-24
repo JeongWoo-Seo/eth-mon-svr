@@ -13,8 +13,9 @@ type Process struct {
 	ethClient *ethclient.Client
 }
 
-func NewProcess(client *ethclient.Client) *Process {
+func NewProcess(state *mempool.State, client *ethclient.Client) *Process {
 	return &Process{
+		state:     state,
 		ethClient: client,
 	}
 }
