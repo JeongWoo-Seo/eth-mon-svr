@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -26,5 +27,6 @@ func (p *Process) GetTxInfo(hash common.Hash) {
 		return
 	}
 
+	report.IncTxFeched()
 	p.state.Upset(tx)
 }

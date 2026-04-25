@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -109,6 +110,9 @@ func connectAndStream[T any](
 		case data := <-ch:
 			select {
 			case outCh <- data:
+				if label == "PendingTx" {
+					report.IncPendginRecieved()
+				}
 			default:
 				// drop
 			}

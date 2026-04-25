@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -46,9 +47,11 @@ func (s *State) Upset(tx *types.Transaction) {
 	if ok {
 		if state.GasFeeCap > old.GasFeeCap {
 			s.data[key] = state
+			report.IncMempoolStored()
 		}
 	} else {
 		s.data[key] = state
+		report.IncMempoolStored()
 	}
 }
 

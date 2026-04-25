@@ -12,6 +12,7 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/processor"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/worker"
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -55,6 +56,7 @@ func main() {
 	proc := processor.NewProcess(state, ethClient.EthClient)
 	pool := worker.NewPool(50, proc)
 	pool.Start(ctx)
+	report.StartReporter(ctx)
 
 	//////////////////////////
 	// subscribe eth
