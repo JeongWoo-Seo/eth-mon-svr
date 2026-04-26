@@ -3,13 +3,19 @@ package worker
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
+const (
+	maxBatchSize  = 50
+	flushInterval = 200 * time.Millisecond
+)
+
 type Processor interface {
-	GetTxInfo(hash common.Hash)
+	GetTxInfo(hashes []common.Hash)
 }
 
 type Pool struct {
@@ -38,8 +44,38 @@ func (p *Pool) Start(ctx context.Context) {
 func (p *Pool) worker(ctx context.Context) {
 	defer p.wg.Done()
 
-	for hash := range p.jobs {
-		p.proc.GetTxInfo(common.HexToHash(hash))
+	batch := make([]common.Hash, 0, maxBatchSize)
+
+	ticker := time.NewTicker(flushInterval)
+	defer ticker.Stop()
+
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		p.proc.GetTxInfo(batch)
+		batch = batch[:0] // batch 버퍼 0으로 초기화
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			flush()
+			return
+		case hash, ok := <-p.jobs:
+			if !ok { //<-p.jobs 이 닫혔을 때 동작
+				flush()
+				return
+			}
+			batch = append(batch, common.HexToHash(hash))
+
+			if len(batch) >= maxBatchSize {
+				flush()
+				ticker.Reset(flushInterval)
+			}
+		case <-ticker.C:
+			flush()
+		}
 	}
 }
 

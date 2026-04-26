@@ -54,7 +54,7 @@ func main() {
 	//////////////////////////
 	state := mempool.NewState()
 	proc := processor.NewProcess(state, ethClient.EthClient)
-	pool := worker.NewPool(50, proc)
+	pool := worker.NewPool(8, proc)
 	pool.Start(ctx)
 	report.StartReporter(ctx)
 
