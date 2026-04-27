@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 	"log/slog"
-	"os"
+	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/eth"
@@ -40,7 +40,7 @@ func main() {
 			"system", "ethereum",
 			"action", "connect",
 		)
-		os.Exit(1)
+		panic(err)
 	}
 	defer ethClient.Close()
 
@@ -53,6 +53,13 @@ func main() {
 	// set pool, processor, mempool
 	//////////////////////////
 	state := mempool.NewState()
+	dedup, err := mempool.NewCache(10000, 2*time.Minute)
+	if err != nil {
+		logger.Error(ctx, "failed to initialize mempool cache",
+			err,
+			slog.String("system", "lru"))
+		panic(err)
+	}
 	proc := processor.NewProcess(state, ethClient.EthClient)
 	pool := worker.NewPool(8, proc)
 	pool.Start(ctx)
@@ -63,7 +70,7 @@ func main() {
 	//////////////////////////
 	headerChan := make(chan *types.Header)
 
-	sub := ingestion.NewSubscriber(cfg.EthRpcWsUrl, headerChan, pool.Input())
+	sub := ingestion.NewSubscriber(cfg.EthRpcWsUrl, headerChan, pool.Input(), dedup)
 	sub.SubscriberStart(ctx)
 
 	for {

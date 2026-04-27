@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -21,19 +22,21 @@ type Subscriber struct {
 	wsUrl      string
 	headerChan chan<- *types.Header
 	txHashChan chan<- string
+	dedup      *mempool.Cache
 }
 
-func NewSubscriber(url string, headerChan chan<- *types.Header, txHashChan chan<- string) *Subscriber {
+func NewSubscriber(url string, headerChan chan<- *types.Header, txHashChan chan<- string, dedup *mempool.Cache) *Subscriber {
 	return &Subscriber{
 		wsUrl:      url,
 		headerChan: headerChan,
 		txHashChan: txHashChan,
+		dedup:      dedup,
 	}
 }
 
 func (s *Subscriber) SubscriberStart(ctx context.Context) {
-	go subscription(ctx, s.wsUrl, "Header", "newHeads", headBufferSize, s.headerChan)
-	go subscription(ctx, s.wsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan)
+	go subscription(ctx, s.wsUrl, "Header", "newHeads", headBufferSize, s.headerChan, nil)
+	go subscription(ctx, s.wsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
 }
 
 func subscription[T any](
@@ -43,9 +46,10 @@ func subscription[T any](
 	method string,
 	buff int,
 	outCh chan<- T,
+	dedup *mempool.Cache,
 ) {
 	for {
-		err := connectAndStream(ctx, url, label, method, buff, outCh)
+		err := connectAndStream(ctx, url, label, method, buff, outCh, dedup)
 		if err != nil {
 			logger.Error(ctx, "ethereum disconnected",
 				err,
@@ -81,6 +85,7 @@ func connectAndStream[T any](
 	method string,
 	buff int,
 	outCh chan<- T,
+	dedup *mempool.Cache,
 ) error {
 	client, err := rpc.DialContext(ctx, url)
 	if err != nil {
@@ -108,13 +113,21 @@ func connectAndStream[T any](
 		case err := <-sub.Err():
 			return err
 		case data := <-ch:
+			// 1. PendingTx 라벨인 경우에만 '먼저' 중복 체크
+			if label == "PendingTx" {
+				if txHash, ok := any(data).(string); ok {
+					if dedup != nil && dedup.Seen(txHash) {
+						continue // 이미 본 트랜잭션은 채널에 넣지도 않고 무시
+					}
+				}
+				report.IncPendginRecieved()
+			}
+
+			// 2. 필터링을 통과한 데이터만 채널 전송 시도
 			select {
 			case outCh <- data:
-				if label == "PendingTx" {
-					report.IncPendginRecieved()
-				}
 			default:
-				// drop
+				// Worker Pool이 꽉 찼을 때만 여기서 Drop 발생
 			}
 		}
 	}
