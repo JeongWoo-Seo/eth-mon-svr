@@ -6,16 +6,19 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 const (
 	maxBatchSize  = 50
 	flushInterval = 200 * time.Millisecond
+	txBufferSize  = 50000
 )
 
 type Processor interface {
 	GetTxInfo(hashes []common.Hash)
+	GetBlockByHash(header *types.Header)
 }
 
 type Pool struct {
@@ -29,7 +32,7 @@ type Pool struct {
 func NewPool(workers int, porc Processor) *Pool {
 	return &Pool{
 		workers: workers,
-		jobs:    make(chan string, 5000),
+		jobs:    make(chan string, txBufferSize),
 		proc:    porc,
 	}
 }

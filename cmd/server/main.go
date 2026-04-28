@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/processor"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/worker"
-	"github.com/ethereum/go-ethereum/core/types"
 )
 
 func main() {
@@ -63,18 +61,17 @@ func main() {
 	proc := processor.NewProcess(state, ethClient.EthClient)
 	pool := worker.NewPool(8, proc)
 	pool.Start(ctx)
+	blockWorker := worker.NewBlockWorker(proc)
+	blockWorker.Start(ctx)
 	report.StartReporter(ctx)
 
 	//////////////////////////
 	// subscribe eth
 	//////////////////////////
-	headerChan := make(chan *types.Header)
-
-	sub := ingestion.NewSubscriber(cfg.EthRpcWsUrl, headerChan, pool.Input(), dedup)
+	sub := ingestion.NewSubscriber(cfg.EthRpcWsUrl, blockWorker.Input(), pool.Input(), dedup)
 	sub.SubscriberStart(ctx)
 
 	for {
-		log.Println(<-headerChan)
-	}
 
+	}
 }

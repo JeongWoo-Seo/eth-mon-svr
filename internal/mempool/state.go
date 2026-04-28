@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"math/big"
 	"strconv"
 	"sync"
 	"time"
@@ -12,18 +13,20 @@ import (
 type TxState struct {
 	Hash      string
 	Nonce     uint64
-	GasFeeCap string
+	GasFeeCap *big.Int
 	Timestamp time.Time
 }
 
 type State struct {
-	data map[string]TxState
-	mu   sync.Mutex
+	data      map[string]TxState
+	hashToKey map[string]string
+	mu        sync.Mutex
 }
 
 func NewState() *State {
 	s := &State{
-		data: make(map[string]TxState),
+		data:      make(map[string]TxState),
+		hashToKey: make(map[string]string),
 	}
 
 	go s.cleaner()
@@ -33,26 +36,46 @@ func NewState() *State {
 
 func (s *State) Upset(tx *types.Transaction) {
 	key := strconv.FormatUint(tx.Nonce(), 10)
-	state := TxState{
-		Hash:      tx.Hash().Hex(),
-		Nonce:     tx.Nonce(),
-		GasFeeCap: tx.GasFeeCap().String(),
-		Timestamp: time.Now(),
-	}
+	txHash := tx.Hash().Hex()
+	newFee := tx.GasFeeCap()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	old, ok := s.data[key]
-	if ok {
-		if state.GasFeeCap > old.GasFeeCap {
-			s.data[key] = state
-			report.IncMempoolStored()
+	old, exists := s.data[key]
+	if exists {
+		if newFee.Cmp(old.GasFeeCap) > 0 {
+			delete(s.data, key)
+			s.update(key, txHash, tx.Nonce(), newFee)
 		}
 	} else {
-		s.data[key] = state
+		s.update(key, txHash, tx.Nonce(), newFee)
 		report.IncMempoolStored()
 	}
+}
+
+func (s *State) update(key string, txHash string, nonce uint64, fee *big.Int) {
+	s.data[key] = TxState{
+		Hash:      txHash, //hex
+		Nonce:     nonce,
+		GasFeeCap: fee,
+		Timestamp: time.Now(),
+	}
+	s.hashToKey[txHash] = key
+}
+
+func (s *State) Delete(txHash string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	nonceKey, exists := s.hashToKey[txHash]
+	if !exists {
+		return false
+	}
+
+	delete(s.data, nonceKey)
+	delete(s.hashToKey, txHash)
+	return true
 }
 
 func (s *State) cleaner() {

@@ -76,3 +76,35 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 		p.state.Upset(tx)
 	}
 }
+
+func (p *Process) GetBlockByHash(header *types.Header) {
+	ctx := context.Background()
+
+	block, err := p.ethClient.BlockByHash(ctx, header.Hash())
+	if err != nil {
+		logger.Error(ctx, "Failed to fetch block by hash",
+			err,
+			slog.String("system", "ethereum"),
+			slog.String("block_hash", header.Hash().Hex()))
+		return
+	}
+
+	txs := block.Transactions()
+	if len(txs) == 0 {
+		return
+	}
+
+	removedCnt := 0
+	for _, tx := range txs {
+		if p.state.Delete(tx.Hash().Hex()) {
+			removedCnt++
+		}
+	}
+
+	if removedCnt > 0 {
+		logger.Info(ctx, "Transactions cleared from mempool",
+			slog.Uint64("block_number", block.NumberU64()),
+			slog.Int("removed_count", removedCnt),
+		)
+	}
+}

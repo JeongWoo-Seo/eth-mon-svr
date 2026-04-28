@@ -113,21 +113,20 @@ func connectAndStream[T any](
 		case err := <-sub.Err():
 			return err
 		case data := <-ch:
-			// 1. PendingTx 라벨인 경우에만 '먼저' 중복 체크
 			if label == "PendingTx" {
 				if txHash, ok := any(data).(string); ok {
 					if dedup != nil && dedup.Seen(txHash) {
+						logger.Info(ctx, "dedup seen")
 						continue // 이미 본 트랜잭션은 채널에 넣지도 않고 무시
 					}
 				}
 				report.IncPendginRecieved()
 			}
 
-			// 2. 필터링을 통과한 데이터만 채널 전송 시도
 			select {
 			case outCh <- data:
 			default:
-				// Worker Pool이 꽉 찼을 때만 여기서 Drop 발생
+				//pool이 꽉 찼을 때만 Drop
 			}
 		}
 	}
