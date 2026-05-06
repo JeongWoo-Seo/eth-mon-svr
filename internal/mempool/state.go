@@ -34,34 +34,44 @@ func NewState() *State {
 	return s
 }
 
-func (s *State) Upset(tx *types.Transaction) {
-	key := strconv.FormatUint(tx.Nonce(), 10)
-	txHash := tx.Hash().Hex()
-	newFee := tx.GasFeeCap()
+func (s *State) UpsetBulk(txs []*types.Transaction) {
+	if len(txs) == 0 {
+		return
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	old, exists := s.data[key]
-	if exists {
-		if newFee.Cmp(old.GasFeeCap) > 0 {
-			delete(s.data, key)
-			s.update(key, txHash, tx.Nonce(), newFee)
+	for _, tx := range txs {
+		if tx == nil {
+			continue
 		}
-	} else {
-		s.update(key, txHash, tx.Nonce(), newFee)
-		report.IncMempoolStored()
+
+		key := strconv.FormatUint(tx.Nonce(), 10)
+		newFee := tx.GasFeeCap()
+
+		old, exists := s.data[key]
+		if exists {
+			if newFee != nil && old.GasFeeCap != nil && newFee.Cmp(old.GasFeeCap) > 0 {
+				s.update(key, tx)
+				report.IncTxFeched(uint64(1))
+			}
+		} else {
+			s.update(key, tx)
+			report.IncTxFeched(uint64(1))
+		}
+
 	}
 }
 
-func (s *State) update(key string, txHash string, nonce uint64, fee *big.Int) {
+func (s *State) update(key string, tx *types.Transaction) {
 	s.data[key] = TxState{
-		Hash:      txHash, //hex
-		Nonce:     nonce,
-		GasFeeCap: fee,
+		Hash:      tx.Hash().Hex(), //hex
+		Nonce:     tx.Nonce(),
+		GasFeeCap: tx.GasFeeCap(),
 		Timestamp: time.Now(),
 	}
-	s.hashToKey[txHash] = key
+	s.hashToKey[tx.Hash().Hex()] = key
 }
 
 func (s *State) Delete(txHash string) bool {
@@ -76,6 +86,28 @@ func (s *State) Delete(txHash string) bool {
 	delete(s.data, nonceKey)
 	delete(s.hashToKey, txHash)
 	return true
+}
+
+func (s *State) DeleteBulk(hashes []string) int {
+	if len(hashes) == 0 {
+		return 0
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	removed := 0
+	for _, h := range hashes {
+		nonce, exist := s.hashToKey[h]
+		if !exist {
+			continue
+		}
+
+		delete(s.data, nonce)
+		delete(s.hashToKey, h)
+		removed++
+	}
+	return removed
 }
 
 func (s *State) cleaner() {

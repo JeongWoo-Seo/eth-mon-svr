@@ -3,10 +3,10 @@ package processor
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -16,6 +16,29 @@ import (
 type Process struct {
 	state     *mempool.State
 	ethClient *ethclient.Client
+}
+
+var batchElemPool = sync.Pool{
+	New: func() interface{} {
+		e := make([]rpc.BatchElem, 0, 100)
+		return &e
+	},
+}
+
+var txResultPool = sync.Pool{
+	New: func() interface{} {
+		r := make([]*types.Transaction, 0, 100)
+		return &r
+	},
+}
+
+// 이더리움 메인넷 평균 트랜잭션은 150~300개 사이입니다.
+var txHashPool = sync.Pool{
+	New: func() interface{} {
+
+		b := make([]string, 0, 300)
+		return &b
+	},
 }
 
 func NewProcess(state *mempool.State, client *ethclient.Client) *Process {
@@ -30,10 +53,21 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 		return
 	}
 
-	elems := make([]rpc.BatchElem, len(hashes))
-	results := make([]*types.Transaction, len(hashes))
+	ePtr := batchElemPool.Get().(*[]rpc.BatchElem)
+	rPtr := txResultPool.Get().(*[]*types.Transaction)
+	elems := (*ePtr)[:0]
+	results := (*rPtr)[:0]
+
+	if cap(elems) < len(hashes) {
+		elems = make([]rpc.BatchElem, len(hashes))
+		results = make([]*types.Transaction, len(hashes))
+	} else {
+		elems = elems[:len(hashes)]
+		results = results[:len(hashes)]
+	}
 
 	for i, hash := range hashes {
+		results[i] = nil // 이전 결과 초기화
 		elems[i] = rpc.BatchElem{
 			Method: "eth_getTransactionByHash",
 			Args:   []interface{}{hash},
@@ -53,28 +87,16 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 		return
 	}
 
-	for i, elem := range elems {
-		if elem.Error != nil {
-			logger.Error(ctx, "Failed to fetch transaction in batch",
-				elem.Error,
-				slog.String("system", "ethereum"),
-				slog.String("tx_hash", hashes[i].Hex()),
-			)
-			continue
-		}
+	p.state.UpsetBulk(results)
 
-		tx := results[i]
-		if tx == nil {
-			logger.Warn(ctx, "Transaction not found",
-				slog.String("system", "ethereum"),
-				slog.String("tx_hash", hashes[i].Hex()),
-			)
-			continue
-		}
-
-		report.IncTxFeched(uint64(1))
-		p.state.Upset(tx)
+	for i := range results {
+		results[i] = nil
 	}
+
+	*ePtr = elems
+	*rPtr = results
+	batchElemPool.Put(ePtr)
+	txResultPool.Put(rPtr)
 }
 
 func (p *Process) GetBlockByHash(header *types.Header) {
@@ -94,12 +116,17 @@ func (p *Process) GetBlockByHash(header *types.Header) {
 		return
 	}
 
-	removedCnt := 0
+	pSlicePtr := txHashPool.Get().(*[]string) //메모리 가져오기
+	txHashes := *pSlicePtr
+	txHashes = txHashes[:0]
+
 	for _, tx := range txs {
-		if p.state.Delete(tx.Hash().Hex()) {
-			removedCnt++
-		}
+		txHashes = append(txHashes, tx.Hash().Hex())
 	}
+	removedCnt := p.state.DeleteBulk(txHashes)
+
+	*pSlicePtr = txHashes     //혹시라도 트랜잭션이 너무 많아 슬라이스의 Capacity가 늘어났다면, 슬라이스 헤더 정보(포인터, 길이, 용량)가 변경
+	txHashPool.Put(pSlicePtr) // 반납하기
 
 	if removedCnt > 0 {
 		logger.Info(ctx, "Transactions cleared from mempool",

@@ -78,6 +78,9 @@ func main() {
 
 	logger.Info(ctx, "Monitoring server started.")
 
+	//////////////////////////
+	// server shutdown
+	//////////////////////////
 	<-ctx.Done()
 
 	logger.Info(context.Background(), "Shutting down server...")
