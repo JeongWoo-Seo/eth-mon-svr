@@ -87,6 +87,7 @@ func (s *State) cleaner() {
 		s.mu.Lock()
 		for h, v := range s.data {
 			if now.Sub(v.Timestamp) > 2*time.Minute {
+				delete(s.hashToKey, v.Hash)
 				delete(s.data, h)
 			}
 		}

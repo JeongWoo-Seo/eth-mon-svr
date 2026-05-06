@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
@@ -19,7 +22,8 @@ func main() {
 	//////////////////////////
 	// load config
 	//////////////////////////
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	cfg := config.LoadConfig()
 
 	logger.New(logger.Config{
@@ -71,7 +75,11 @@ func main() {
 	sub := ingestion.NewSubscriber(cfg.EthRpcWsUrl, blockWorker.Input(), pool.Input(), dedup)
 	sub.SubscriberStart(ctx)
 
-	for {
+	logger.Info(ctx, "Monitoring server started.")
 
-	}
+	<-ctx.Done()
+
+	logger.Info(context.Background(), "Shutting down server...")
+
+	time.Sleep(2 * time.Second)
 }
