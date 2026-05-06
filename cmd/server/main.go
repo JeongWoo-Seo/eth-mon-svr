@@ -24,6 +24,7 @@ func main() {
 	//////////////////////////
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
 	cfg := config.LoadConfig()
 
 	logger.New(logger.Config{
