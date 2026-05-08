@@ -1,7 +1,6 @@
 package mempool
 
 import (
-	"math/big"
 	"strconv"
 	"sync"
 	"time"
@@ -10,22 +9,15 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
-type TxState struct {
-	Hash      string
-	Nonce     uint64
-	GasFeeCap *big.Int
-	Timestamp time.Time
-}
-
 type State struct {
-	data      map[string]TxState
+	data      map[string]PendingTxInfo
 	hashToKey map[string]string
 	mu        sync.Mutex
 }
 
 func NewState() *State {
 	s := &State{
-		data:      make(map[string]TxState),
+		data:      make(map[string]PendingTxInfo),
 		hashToKey: make(map[string]string),
 	}
 
@@ -65,10 +57,10 @@ func (s *State) UpsetBulk(txs []*types.Transaction) {
 }
 
 func (s *State) update(key string, tx *types.Transaction) {
-	s.data[key] = TxState{
+	s.data[key] = PendingTxInfo{
 		Hash:      tx.Hash().Hex(), //hex
-		Nonce:     tx.Nonce(),
-		GasFeeCap: tx.GasFeeCap(),
+		GasFeeCap: tx.GasFeeCap(),  //max fee
+		GasTipCap: tx.GasTipCap(),
 		Timestamp: time.Now(),
 	}
 	s.hashToKey[tx.Hash().Hex()] = key
@@ -108,6 +100,18 @@ func (s *State) DeleteBulk(hashes []string) int {
 		removed++
 	}
 	return removed
+}
+
+func (s *State) Snapshot() map[string]PendingTxInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cp := make(map[string]PendingTxInfo, len(s.data))
+	for k, v := range s.data {
+		cp[k] = v
+	}
+
+	return cp
 }
 
 func (s *State) cleaner() {
