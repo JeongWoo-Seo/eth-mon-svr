@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/eth"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/ingestion"
@@ -63,11 +64,15 @@ func main() {
 			slog.String("system", "lru"))
 		panic(err)
 	}
-	proc := processor.NewProcess(state, ethClient.EthClient)
+	blockstore := blockstore.NewBlockStore(20)
+
+	proc := processor.NewProcess(state, blockstore, ethClient.EthClient)
 	pool := worker.NewPool(8, proc)
 	pool.Start(ctx)
+
 	blockWorker := worker.NewBlockWorker(proc)
 	blockWorker.Start(ctx)
+
 	report.StartReporter(ctx)
 
 	//////////////////////////

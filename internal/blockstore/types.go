@@ -2,8 +2,6 @@ package blockstore
 
 import (
 	"math/big"
-
-	"github.com/ethereum/go-ethereum/common"
 )
 
 type BlockData struct {
@@ -14,8 +12,7 @@ type BlockData struct {
 }
 
 type TxInfo struct {
-	Hash      common.Hash
+	Hash      string
 	Tip       uint64
-	GasUsed   uint64
 	GasWeight float64 // sqrt(gasUsed / gasLimit)
 }

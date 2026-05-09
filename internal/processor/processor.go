@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/ethereum/go-ethereum/common"
@@ -14,8 +16,9 @@ import (
 )
 
 type Process struct {
-	state     *mempool.State
-	ethClient *ethclient.Client
+	state      *mempool.State
+	blockstore *blockstore.Store
+	ethClient  *ethclient.Client
 }
 
 var batchElemPool = sync.Pool{
@@ -41,10 +44,11 @@ var txHashPool = sync.Pool{
 	},
 }
 
-func NewProcess(state *mempool.State, client *ethclient.Client) *Process {
+func NewProcess(state *mempool.State, blockstore *blockstore.Store, client *ethclient.Client) *Process {
 	return &Process{
-		state:     state,
-		ethClient: client,
+		state:      state,
+		blockstore: blockstore,
+		ethClient:  client,
 	}
 }
 
@@ -102,6 +106,7 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 func (p *Process) GetBlockByHash(header *types.Header) {
 	ctx := context.Background()
 
+	// 블록 데이터 가져오기
 	block, err := p.ethClient.BlockByHash(ctx, header.Hash())
 	if err != nil {
 		logger.Error(ctx, "Failed to fetch block by hash",
@@ -116,9 +121,80 @@ func (p *Process) GetBlockByHash(header *types.Header) {
 		return
 	}
 
-	pSlicePtr := txHashPool.Get().(*[]string) //메모리 가져오기
-	txHashes := *pSlicePtr
-	txHashes = txHashes[:0]
+	// tx 영수증 가져오기
+	receipt, err := p.fetchReceiptsBatch(ctx, txs)
+	if err != nil {
+		logger.Error(ctx, "Failed to fetch receipts batch",
+			err,
+			slog.String("system", "ethereum"),
+		)
+		return
+	}
+
+	// 블록 데이터 가공
+	blockData := p.CalculateBlockTxTip(block, txs, receipt)
+
+	//데이터 저장
+	p.blockstore.AddBlock(blockData)
+	p.ClearMempool(ctx, block, txs)
+}
+
+func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions) ([]*types.Receipt, error) {
+	receipts := make([]*types.Receipt, len(txs))
+	elems := make([]rpc.BatchElem, len(txs))
+
+	for i, tx := range txs {
+		elems[i] = rpc.BatchElem{
+			Method: "eth_getTransactionReceipt",
+			Args:   []interface{}{tx.Hash()},
+			Result: &receipts[i],
+		}
+	}
+
+	if err := p.ethClient.Client().BatchCallContext(ctx, elems); err != nil {
+		return nil, err
+	}
+
+	return receipts, nil
+}
+
+func (p *Process) CalculateBlockTxTip(block *types.Block, txs types.Transactions, receipts []*types.Receipt) blockstore.BlockData {
+	blockData := blockstore.BlockData{
+		Number:   block.NumberU64(),
+		BaseFee:  block.BaseFee(),
+		GasLimit: block.GasLimit(),
+		Txs:      make([]blockstore.TxInfo, 0, len(txs)),
+	}
+
+	for i, tx := range txs {
+		if receipts[i] == nil {
+			continue
+		}
+
+		tip, ok := gasanalyzer.EffectiveTip(tx.GasFeeCap(), tx.GasTipCap(), blockData.BaseFee)
+		if !ok {
+			continue
+		}
+
+		weight := gasanalyzer.CalculateWeightForGasUsed(receipts[i].GasUsed, blockData.GasLimit)
+		blockData.Txs = append(blockData.Txs, blockstore.TxInfo{
+			Hash:      tx.Hash().Hex(),
+			Tip:       tip,
+			GasWeight: weight,
+		})
+	}
+
+	return blockData
+}
+
+func (p *Process) ClearMempool(ctx context.Context, block *types.Block, txs types.Transactions) {
+	if len(txs) == 0 {
+		return
+	}
+
+	//sync.Pool에서 슬라이스 메모리 빌리기
+	pSlicePtr := txHashPool.Get().(*[]string)
+	txHashes := (*pSlicePtr)[:0]
 
 	for _, tx := range txs {
 		txHashes = append(txHashes, tx.Hash().Hex())
