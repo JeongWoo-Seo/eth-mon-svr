@@ -52,7 +52,6 @@ func (s *State) UpsetBulk(txs []*types.Transaction) {
 			s.update(key, tx)
 			report.IncTxFeched(uint64(1))
 		}
-
 	}
 }
 

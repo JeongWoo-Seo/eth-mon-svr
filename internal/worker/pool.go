@@ -18,7 +18,8 @@ const (
 
 type Processor interface {
 	GetTxInfo(hashes []common.Hash)
-	GetBlockByHash(header *types.Header)
+	ProcessBlock(header *types.Header) (*types.Block, bool)
+	AnalyzeGasPrice(latestBlock *types.Block)
 }
 
 type Pool struct {

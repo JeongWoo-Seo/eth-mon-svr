@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/ethereum/go-ethereum/common"
@@ -103,7 +102,7 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 	txResultPool.Put(rPtr)
 }
 
-func (p *Process) GetBlockByHash(header *types.Header) {
+func (p *Process) ProcessBlock(header *types.Header) (*types.Block, bool) {
 	ctx := context.Background()
 
 	// 블록 데이터 가져오기
@@ -113,12 +112,12 @@ func (p *Process) GetBlockByHash(header *types.Header) {
 			err,
 			slog.String("system", "ethereum"),
 			slog.String("block_hash", header.Hash().Hex()))
-		return
+		return nil, false
 	}
 
 	txs := block.Transactions()
 	if len(txs) == 0 {
-		return
+		return block, true
 	}
 
 	// tx 영수증 가져오기
@@ -128,7 +127,9 @@ func (p *Process) GetBlockByHash(header *types.Header) {
 			err,
 			slog.String("system", "ethereum"),
 		)
-		return
+		// 영수증은 실패했어도 블록에 포함된건 확실하므로 멤풀은 정리
+		p.ClearMempool(ctx, block, txs)
+		return nil, false
 	}
 
 	// 블록 데이터 가공
@@ -137,77 +138,10 @@ func (p *Process) GetBlockByHash(header *types.Header) {
 	//데이터 저장
 	p.blockstore.AddBlock(blockData)
 	p.ClearMempool(ctx, block, txs)
+
+	return block, true
 }
 
-func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions) ([]*types.Receipt, error) {
-	receipts := make([]*types.Receipt, len(txs))
-	elems := make([]rpc.BatchElem, len(txs))
+func (p *Process) AnalyzeGasPrice(latestBlock *types.Block) {
 
-	for i, tx := range txs {
-		elems[i] = rpc.BatchElem{
-			Method: "eth_getTransactionReceipt",
-			Args:   []interface{}{tx.Hash()},
-			Result: &receipts[i],
-		}
-	}
-
-	if err := p.ethClient.Client().BatchCallContext(ctx, elems); err != nil {
-		return nil, err
-	}
-
-	return receipts, nil
-}
-
-func (p *Process) CalculateBlockTxTip(block *types.Block, txs types.Transactions, receipts []*types.Receipt) blockstore.BlockData {
-	blockData := blockstore.BlockData{
-		Number:   block.NumberU64(),
-		BaseFee:  block.BaseFee(),
-		GasLimit: block.GasLimit(),
-		Txs:      make([]blockstore.TxInfo, 0, len(txs)),
-	}
-
-	for i, tx := range txs {
-		if receipts[i] == nil {
-			continue
-		}
-
-		tip, ok := gasanalyzer.EffectiveTip(tx.GasFeeCap(), tx.GasTipCap(), blockData.BaseFee)
-		if !ok {
-			continue
-		}
-
-		weight := gasanalyzer.CalculateWeightForGasUsed(receipts[i].GasUsed, blockData.GasLimit)
-		blockData.Txs = append(blockData.Txs, blockstore.TxInfo{
-			Hash:      tx.Hash().Hex(),
-			Tip:       tip,
-			GasWeight: weight,
-		})
-	}
-
-	return blockData
-}
-
-func (p *Process) ClearMempool(ctx context.Context, block *types.Block, txs types.Transactions) {
-	if len(txs) == 0 {
-		return
-	}
-
-	//sync.Pool에서 슬라이스 메모리 빌리기
-	pSlicePtr := txHashPool.Get().(*[]string)
-	txHashes := (*pSlicePtr)[:0]
-
-	for _, tx := range txs {
-		txHashes = append(txHashes, tx.Hash().Hex())
-	}
-	removedCnt := p.state.DeleteBulk(txHashes)
-
-	*pSlicePtr = txHashes     //혹시라도 트랜잭션이 너무 많아 슬라이스의 Capacity가 늘어났다면, 슬라이스 헤더 정보(포인터, 길이, 용량)가 변경
-	txHashPool.Put(pSlicePtr) // 반납하기
-
-	if removedCnt > 0 {
-		logger.Info(ctx, "Transactions cleared from mempool",
-			slog.Uint64("block_number", block.NumberU64()),
-			slog.Int("removed_count", removedCnt),
-		)
-	}
 }
