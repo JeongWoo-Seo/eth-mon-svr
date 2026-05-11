@@ -11,6 +11,7 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/eth"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/ingestion"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
@@ -64,10 +65,11 @@ func main() {
 			slog.String("system", "lru"))
 		panic(err)
 	}
-	blockstore := blockstore.NewBlockStore(20)
+	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
-	proc := processor.NewProcess(state, blockstore, ethClient.EthClient)
-	pool := worker.NewPool(8, proc)
+	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda)
+	proc := processor.NewProcess(state, blockstore, ethClient.EthClient, analyzer)
+	pool := worker.NewPool(cfg.WorkerCount, proc)
 	pool.Start(ctx)
 
 	blockWorker := worker.NewBlockWorker(proc)

@@ -9,11 +9,14 @@ import (
 )
 
 type Config struct {
-	Service       string `mapstructure:"SERVICE"`
-	Env           string `mapstructure:"ENV"`
-	ServerPort    string `mapstructure:"SERVER_PORT"`
-	EthRpcHttpUrl string `mapstructure:"ETH_RPC_HTTP_URL"`
-	EthRpcWsUrl   string `mapstructure:"ETH_RPC_WS_URL"`
+	Service       string  `mapstructure:"SERVICE"`
+	Env           string  `mapstructure:"ENV"`
+	ServerPort    string  `mapstructure:"SERVER_PORT"`
+	EthRpcHttpUrl string  `mapstructure:"ETH_RPC_HTTP_URL"`
+	EthRpcWsUrl   string  `mapstructure:"ETH_RPC_WS_URL"`
+	WorkerCount   int     `mapstructure:"WORKER_COUNT"`
+	MaxBlockCount int     `mapstructre:"MAX_BLOCK_COUNT"`
+	Lamda         float64 `mapstructre:"LAMDA"`
 }
 
 func LoadConfig() *Config {

@@ -60,6 +60,7 @@ func (s *State) update(key string, tx *types.Transaction) {
 		Hash:      tx.Hash().Hex(), //hex
 		GasFeeCap: tx.GasFeeCap(),  //max fee
 		GasTipCap: tx.GasTipCap(),
+		Gas:       tx.Gas(),
 		Timestamp: time.Now(),
 	}
 	s.hashToKey[tx.Hash().Hex()] = key

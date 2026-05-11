@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/ethereum/go-ethereum/common"
@@ -15,9 +16,10 @@ import (
 )
 
 type Process struct {
-	state      *mempool.State
-	blockstore *blockstore.Store
-	ethClient  *ethclient.Client
+	state       *mempool.State
+	blockstore  *blockstore.Store
+	ethClient   *ethclient.Client
+	gasanalyzer *gasanalyzer.Analyzer
 }
 
 var batchElemPool = sync.Pool{
@@ -43,11 +45,12 @@ var txHashPool = sync.Pool{
 	},
 }
 
-func NewProcess(state *mempool.State, blockstore *blockstore.Store, client *ethclient.Client) *Process {
+func NewProcess(state *mempool.State, blockstore *blockstore.Store, client *ethclient.Client, gasanalyzer *gasanalyzer.Analyzer) *Process {
 	return &Process{
-		state:      state,
-		blockstore: blockstore,
-		ethClient:  client,
+		state:       state,
+		blockstore:  blockstore,
+		ethClient:   client,
+		gasanalyzer: gasanalyzer,
 	}
 }
 
@@ -143,5 +146,25 @@ func (p *Process) ProcessBlock(header *types.Header) (*types.Block, bool) {
 }
 
 func (p *Process) AnalyzeGasPrice(latestBlock *types.Block) {
+	//basefee 계산
+	nextBaseFee := p.gasanalyzer.CalculateNextBaseFee(latestBlock.BaseFee(), latestBlock.GasUsed(), latestBlock.GasLimit())
 
+	//pending tx weight 계산
+	poolData := p.collectPendingTx(nextBaseFee, latestBlock.GasLimit())
+
+	//block data
+	blockData := p.collectBlockTx()
+	poolData = append(poolData, blockData...)
+
+	//가중 백분위 계산
+	result := p.gasanalyzer.WeightedPercentiles(poolData)
+
+	//결과 업데이트
+	p.gasanalyzer.ResultUpdate(latestBlock.NumberU64()+1, nextBaseFee, result)
+
+	logger.Info(context.Background(), "Gas analysis complete",
+		slog.String("system", "gas ananlysis"),
+		slog.Int("pending_tx_count", len(poolData)-len(blockData)),
+		slog.Int("block_tx_count", len(blockData)),
+	)
 }

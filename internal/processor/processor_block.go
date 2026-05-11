@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -43,12 +42,12 @@ func (p *Process) CalculateBlockTxTip(block *types.Block, txs types.Transactions
 			continue
 		}
 
-		tip, ok := gasanalyzer.EffectiveTip(tx.GasFeeCap(), tx.GasTipCap(), blockData.BaseFee)
+		tip, ok := p.gasanalyzer.EffectiveTip(tx.GasFeeCap(), tx.GasTipCap(), blockData.BaseFee)
 		if !ok {
 			continue
 		}
 
-		weight := gasanalyzer.CalculateWeightForGasUsed(receipts[i].GasUsed, blockData.GasLimit)
+		weight := p.gasanalyzer.CalculateWeightForGasUsed(receipts[i].GasUsed, blockData.GasLimit)
 		blockData.Txs = append(blockData.Txs, blockstore.TxInfo{
 			Hash:      tx.Hash().Hex(),
 			Tip:       tip,

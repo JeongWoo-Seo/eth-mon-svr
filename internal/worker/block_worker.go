@@ -38,7 +38,7 @@ func (b *BlockWorker) Start(ctx context.Context) {
 					continue
 				}
 
-				// 2. [비동기] 가스 예측 분석
+				// 가스fee 예측 분석
 				// 멤풀 정리가 끝난 직후, 다음 블록 수집과 병렬로 분석 진행
 				go b.proc.AnalyzeGasPrice(block)
 			}
