@@ -1,6 +1,8 @@
 package blockstore
 
-import "sync"
+import (
+	"sync"
+)
 
 type Store struct {
 	mu     sync.RWMutex
@@ -16,8 +18,8 @@ func NewBlockStore(maxSize int) *Store {
 }
 
 func (s *Store) AddBlock(block BlockData) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	s.blocks = append([]BlockData{block}, s.blocks...)
 	if len(s.blocks) > s.max {
@@ -25,10 +27,12 @@ func (s *Store) AddBlock(block BlockData) {
 	}
 }
 
-func (s *Store) GetHistory() []BlockData {
+func (s *Store) GetBlockData() []BlockData {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// 안전한 접근을 위해 복사본 반환 권장 (생략 가능)
-	return s.blocks
+	res := make([]BlockData, len(s.blocks))
+	copy(res, s.blocks)
+
+	return res
 }

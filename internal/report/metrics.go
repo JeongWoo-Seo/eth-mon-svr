@@ -19,7 +19,7 @@ func IncPendginRecieved() {
 	atomic.AddUint64(&M.PendingTx, 1)
 }
 
-func IncTxFeched(cnt uint64) {
+func IncTxFetched(cnt uint64) {
 	atomic.AddUint64(&M.TxFeched, cnt)
 }
 

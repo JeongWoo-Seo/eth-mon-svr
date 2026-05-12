@@ -114,13 +114,13 @@ func connectAndStream[T any](
 			return err
 		case data := <-ch:
 			if label == "PendingTx" {
+				report.IncPendginRecieved()
 				if txHash, ok := any(data).(string); ok {
 					if dedup != nil && dedup.Seen(txHash) {
 						logger.Info(ctx, "dedup seen")
 						continue // 이미 본 트랜잭션은 채널에 넣지도 않고 무시
 					}
 				}
-				report.IncPendginRecieved()
 			}
 
 			select {

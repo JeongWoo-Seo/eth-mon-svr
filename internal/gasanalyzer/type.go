@@ -1,7 +1,6 @@
 package gasanalyzer
 
 import (
-	"math/big"
 	"time"
 )
 
@@ -11,13 +10,13 @@ type WeightedTip struct {
 }
 
 type GasLevel struct {
-	PriorityFee *big.Int `json:"priorityFee"`
-	MaxFee      *big.Int `json:"maxFee"`
+	PriorityFee uint64 `json:"priorityFee"`
+	MaxFee      uint64 `json:"maxFee"`
 }
 
 type GasPrediction struct {
 	BlockNumber uint64              `json:"blockNumber"`
-	NextBaseFee *big.Int            `json:"nextBaseFee"`
+	NextBaseFee uint64              `json:"nextBaseFee"`
 	Levels      map[string]GasLevel `json:"levels"`
 	UpdatedAt   time.Time           `json:"updatedAt"`
 }

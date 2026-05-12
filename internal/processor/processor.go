@@ -9,6 +9,7 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -93,6 +94,7 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 		return
 	}
 
+	report.IncTxFetched(uint64(len(results)))
 	p.state.UpsetBulk(results)
 
 	for i := range results {
@@ -163,7 +165,7 @@ func (p *Process) AnalyzeGasPrice(latestBlock *types.Block) {
 	p.gasanalyzer.ResultUpdate(latestBlock.NumberU64()+1, nextBaseFee, result)
 
 	logger.Info(context.Background(), "Gas analysis complete",
-		slog.String("system", "gas ananlysis"),
+		slog.String("system", "ananlysis"),
 		slog.Int("pending_tx_count", len(poolData)-len(blockData)),
 		slog.Int("block_tx_count", len(blockData)),
 	)

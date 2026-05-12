@@ -7,7 +7,7 @@ import (
 )
 
 func (p *Process) collectBlockTx() []gasanalyzer.WeightedTip {
-	blockData := p.blockstore.GetHistory()
+	blockData := p.blockstore.GetBlockData()
 	pool := make([]gasanalyzer.WeightedTip, 0, len(blockData)*200)
 
 	for i, b := range blockData {

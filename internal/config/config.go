@@ -15,8 +15,8 @@ type Config struct {
 	EthRpcHttpUrl string  `mapstructure:"ETH_RPC_HTTP_URL"`
 	EthRpcWsUrl   string  `mapstructure:"ETH_RPC_WS_URL"`
 	WorkerCount   int     `mapstructure:"WORKER_COUNT"`
-	MaxBlockCount int     `mapstructre:"MAX_BLOCK_COUNT"`
-	Lamda         float64 `mapstructre:"LAMDA"`
+	MaxBlockCount int     `mapstructure:"MAX_BLOCK_COUNT"`
+	Lamda         float64 `mapstructure:"LAMDA"`
 }
 
 func LoadConfig() *Config {

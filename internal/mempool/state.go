@@ -46,11 +46,9 @@ func (s *State) UpsetBulk(txs []*types.Transaction) {
 		if exists {
 			if newFee != nil && old.GasFeeCap != nil && newFee.Cmp(old.GasFeeCap) > 0 {
 				s.update(key, tx)
-				report.IncTxFeched(uint64(1))
 			}
 		} else {
 			s.update(key, tx)
-			report.IncTxFeched(uint64(1))
 		}
 	}
 }
@@ -64,6 +62,7 @@ func (s *State) update(key string, tx *types.Transaction) {
 		Timestamp: time.Now(),
 	}
 	s.hashToKey[tx.Hash().Hex()] = key
+	report.IncMempoolStored()
 }
 
 func (s *State) Delete(txHash string) bool {
