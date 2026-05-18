@@ -3,7 +3,7 @@ package gasanalyzer
 import (
 	"math"
 	"math/big"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 )
@@ -11,6 +11,16 @@ import (
 const (
 	MaxAge = 20
 )
+
+var targets = []struct {
+	name  string
+	ratio float64
+}{
+	{"low", 0.25},
+	{"market", 0.50},
+	{"fast", 0.75},
+	{"urgent", 0.90},
+}
 
 type Analyzer struct {
 	DecayTable   [MaxAge + 1]float64
@@ -34,8 +44,14 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 	}
 
 	// 정렬
-	sort.Slice(poolData, func(i, j int) bool {
-		return poolData[i].Tip < poolData[j].Tip
+	slices.SortFunc(poolData, func(a, b WeightedTip) int {
+		if a.Tip < b.Tip {
+			return -1
+		}
+		if a.Tip > b.Tip {
+			return 1
+		}
+		return 0
 	})
 
 	// 전체 weight 합
@@ -44,35 +60,28 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 		totalWeight += tip.Weight
 	}
 
-	result := make(map[string]uint64)
-	var sum float64
-	targets := []struct {
-		p     string
-		value float64
-	}{
-		{"P25", 0.25},
-		{"P50", 0.50},
-		{"P75", 0.75},
-		{"P95", 0.95},
-	}
-	nextTarget := 0
+	result := make(map[string]uint64, len(targets))
+	var cumulativeWeight float64
+	targetIdx := 0
 
 	for _, tx := range poolData {
-		sum += tx.Weight
-		for nextTarget < len(targets) && sum >= targets[nextTarget].value*totalWeight {
-			result[targets[nextTarget].p] = tx.Tip
-			nextTarget++
+		cumulativeWeight += tx.Weight
+
+		for targetIdx < len(targets) && cumulativeWeight >= targets[targetIdx].ratio*totalWeight {
+			result[targets[targetIdx].name] = tx.Tip
+			targetIdx++
 		}
 
-		if nextTarget >= len(targets) {
+		if targetIdx >= len(targets) {
 			break
 		}
 	}
 
-	//result nexttarget의 값이 남은 경우 pooldata의 마지막 값으로 채움
-	for nextTarget < len(targets) {
-		result[targets[nextTarget].p] = poolData[len(poolData)-1].Tip
-		nextTarget++
+	//팁이 남은경우 채우기
+	lastTip := poolData[len(poolData)-1].Tip
+	for targetIdx < len(targets) {
+		result[targets[targetIdx].name] = lastTip
+		targetIdx++
 	}
 
 	return result
@@ -80,10 +89,10 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 
 func (a *Analyzer) defaultValue() map[string]uint64 {
 	return map[string]uint64{
-		"P25": 1_000_000_000, // 1 gwei
-		"P50": 1_500_000_000, // 1.5 gwei
-		"P75": 2_000_000_000, // 2 gwei
-		"P95": 3_000_000_000, // 3 gwei
+		"low":    1_000_000_000, // Base + 1 Gwei
+		"market": 1_500_000_000, // Base + 1.5 Gwei
+		"fast":   2_000_000_000, // Base + 2 Gwei
+		"urgent": 5_000_000_000, // Base + 5 Gwei
 	}
 }
 
@@ -94,7 +103,6 @@ func (a *Analyzer) ResultUpdate(blockNum uint64, nextBaseFee *big.Int, result ma
 	u64NextBaseFee := nextBaseFee.Uint64()
 	levels := make(map[string]GasLevel)
 	for p, r := range result {
-
 		levels[p] = GasLevel{
 			PriorityFee: r,
 			MaxFee:      u64NextBaseFee + r,

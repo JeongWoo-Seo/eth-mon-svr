@@ -144,6 +144,9 @@ func (p *Process) ProcessBlock(header *types.Header) (*types.Block, bool) {
 	p.blockstore.AddBlock(blockData)
 	p.ClearMempool(ctx, block, txs)
 
+	// 결과 비교
+	p.gasanalyzer.CompareFeeHistory(p.ethClient)
+
 	return block, true
 }
 
@@ -152,11 +155,11 @@ func (p *Process) AnalyzeGasPrice(latestBlock *types.Block) {
 	nextBaseFee := p.gasanalyzer.CalculateNextBaseFee(latestBlock.BaseFee(), latestBlock.GasUsed(), latestBlock.GasLimit())
 
 	//pending tx weight 계산
-	poolData := p.collectPendingTx(nextBaseFee, latestBlock.GasLimit())
+	pendingData := p.collectPendingTx(nextBaseFee, latestBlock.GasLimit())
 
 	//block data
-	blockData := p.collectBlockTx()
-	poolData = append(poolData, blockData...)
+	poolData := p.collectBlockTx()
+	poolData = append(poolData, pendingData...)
 
 	//가중 백분위 계산
 	result := p.gasanalyzer.WeightedPercentiles(poolData)
@@ -165,8 +168,8 @@ func (p *Process) AnalyzeGasPrice(latestBlock *types.Block) {
 	p.gasanalyzer.ResultUpdate(latestBlock.NumberU64()+1, nextBaseFee, result)
 
 	logger.Info(context.Background(), "Gas analysis complete",
-		slog.String("system", "ananlysis"),
-		slog.Int("pending_tx_count", len(poolData)-len(blockData)),
-		slog.Int("block_tx_count", len(blockData)),
+		slog.String("system", "analysis"),
+		slog.Int("pending_tx_count", len(pendingData)),
+		slog.Int("block_tx_count", len(poolData)),
 	)
 }

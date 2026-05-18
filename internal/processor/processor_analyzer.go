@@ -36,7 +36,7 @@ func (p *Process) collectPendingTx(nextBaseFee *big.Int, gasLimit uint64) []gasa
 
 		pool = append(pool, gasanalyzer.WeightedTip{
 			Tip:    tip,
-			Weight: weight,
+			Weight: weight * 0.3,
 		})
 	}
 

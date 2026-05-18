@@ -30,40 +30,46 @@ func (a *Analyzer) EffectiveTip(feeCap, tipCap, baseFee *big.Int) (uint64, bool)
 
 	return result.Uint64(), true
 }
-
 func (a *Analyzer) CalculateNextBaseFee(baseFee *big.Int, gasUsed, gasLimit uint64) *big.Int {
-	targetGas := gasLimit / 2
+	if baseFee == nil {
+		return big.NewInt(1_000_000_000) // 기본 1 gwei
+	}
 
-	//gasused와 targetGas가 동일하면 baseFee는 유지됨
+	targetGas := gasLimit / 2
 	if gasUsed == targetGas {
 		return new(big.Int).Set(baseFee)
 	}
 
 	nextBaseFee := new(big.Int)
-	ta := new(big.Int).SetUint64(targetGas)
-	ta.Mul(ta, big.NewInt(8))
 
-	// basefee + (basefee * (gasused - targetgas) / targetgas / 8)
-	// basefee - (basefee * (targetgas - gasused) / targetgas / 8)
+	//baseFee + (baseFee * (used - target) / target / 8)
+	//baseFee - (baseFee * (target - used) / target / 8)
+	denominator := new(big.Int).SetUint64(8)
+	targetGasBI := new(big.Int).SetUint64(targetGas)
+
 	if gasUsed > targetGas {
 		gasGap := new(big.Int).SetUint64(gasUsed - targetGas)
-		mul := new(big.Int).Mul(baseFee, gasGap)
-		di := new(big.Int).Div(mul, ta)
-		//변화량이 작아 di 가 0인 경우 1wei로 설정함
-		if di.Cmp(big.NewInt(0)) == 0 {
-			di.SetInt64(1)
+		num := new(big.Int).Mul(baseFee, gasGap)
+
+		diff := new(big.Int).Div(num, targetGasBI)
+		diff.Div(diff, denominator)
+
+		if diff.Sign() == 0 {
+			diff.SetUint64(1)
 		}
-		nextBaseFee.Add(baseFee, di)
+		nextBaseFee.Add(baseFee, diff)
 	} else {
 		gasGap := new(big.Int).SetUint64(targetGas - gasUsed)
-		mul := new(big.Int).Mul(baseFee, gasGap)
-		di := new(big.Int).Div(mul, ta)
-		nextBaseFee.Sub(baseFee, di)
+		num := new(big.Int).Mul(baseFee, gasGap)
 
-		//BaseFee가 음수인 경우
-		if nextBaseFee.Cmp(big.NewInt(0)) < 0 {
-			nextBaseFee.SetInt64(0)
-		}
+		diff := new(big.Int).Div(num, targetGasBI)
+		diff.Div(diff, denominator)
+
+		nextBaseFee.Sub(baseFee, diff)
+	}
+
+	if nextBaseFee.Sign() < 0 {
+		nextBaseFee.SetUint64(0)
 	}
 
 	return nextBaseFee
