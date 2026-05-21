@@ -17,7 +17,7 @@ import (
 )
 
 type Process struct {
-	state       *mempool.State
+	pendingPool *mempool.PendingMemPool
 	blockstore  *blockstore.Store
 	ethClient   *ethclient.Client
 	gasanalyzer *gasanalyzer.Analyzer
@@ -46,9 +46,9 @@ var txHashPool = sync.Pool{
 	},
 }
 
-func NewProcess(state *mempool.State, blockstore *blockstore.Store, client *ethclient.Client, gasanalyzer *gasanalyzer.Analyzer) *Process {
+func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, client *ethclient.Client, gasanalyzer *gasanalyzer.Analyzer) *Process {
 	return &Process{
-		state:       state,
+		pendingPool: pendingPool,
 		blockstore:  blockstore,
 		ethClient:   client,
 		gasanalyzer: gasanalyzer,
@@ -95,7 +95,7 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 	}
 
 	report.IncTxFetched(uint64(len(results)))
-	p.state.UpsetBulk(results)
+	p.pendingPool.PushBatch(results)
 
 	for i := range results {
 		results[i] = nil

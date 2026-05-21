@@ -57,7 +57,7 @@ func main() {
 	//////////////////////////
 	// set pool, processor, mempool
 	//////////////////////////
-	state := mempool.NewState()
+	pendingPool := mempool.NewPendingMemPool(300, 30*time.Second)
 	dedup, err := mempool.NewCache(10000, 2*time.Minute)
 	if err != nil {
 		logger.Error(ctx, "failed to initialize mempool cache",
@@ -68,7 +68,7 @@ func main() {
 	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda)
-	proc := processor.NewProcess(state, blockstore, ethClient.EthClient, analyzer)
+	proc := processor.NewProcess(pendingPool, blockstore, ethClient.EthClient, analyzer)
 	pool := worker.NewPool(cfg.WorkerCount, proc)
 	pool.Start(ctx)
 

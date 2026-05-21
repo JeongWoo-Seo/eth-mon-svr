@@ -79,6 +79,35 @@ func (pool *PendingMemPool) PushBatch(txs []*types.Transaction) {
 	}
 }
 
+// 오래된 tx이거나 block에 포함된 tx는 mempool에서 제외
+func (pool *PendingMemPool) CollectAndClean(minedHashes map[string]struct{}) []PendingTxInfo {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	if pool.heap.Len() == 0 {
+		return nil
+	}
+
+	expireTime := time.Now().Add(-pool.ttl)
+
+	oldHeap := *pool.heap
+	survivedTxs := make([]PendingTxInfo, 0, len(oldHeap))
+
+	for _, tx := range oldHeap {
+		_, isMined := minedHashes[tx.Hash]
+
+		if !isMined && tx.Timestamp.After(expireTime) {
+			survivedTxs = append(survivedTxs, tx)
+		}
+	}
+
+	*pool.heap = survivedTxs
+
+	heap.Init(pool.heap)
+
+	return survivedTxs
+}
+
 func (pool *PendingMemPool) Len() int {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
