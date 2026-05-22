@@ -2,6 +2,7 @@ package mempool
 
 import (
 	"container/heap"
+	"math/big"
 	"sync"
 	"time"
 
@@ -80,12 +81,13 @@ func (pool *PendingMemPool) PushBatch(txs []*types.Transaction) {
 }
 
 // 오래된 tx이거나 block에 포함된 tx는 mempool에서 제외
-func (pool *PendingMemPool) CollectAndClean(minedHashes map[string]struct{}) []PendingTxInfo {
+func (pool *PendingMemPool) CollectAndClean(minedHashes map[string]struct{}) int {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	if pool.heap.Len() == 0 {
-		return nil
+	initialCount := pool.heap.Len()
+	if initialCount == 0 {
+		return 0
 	}
 
 	expireTime := time.Now().Add(-pool.ttl)
@@ -105,11 +107,36 @@ func (pool *PendingMemPool) CollectAndClean(minedHashes map[string]struct{}) []P
 
 	heap.Init(pool.heap)
 
-	return survivedTxs
+	return initialCount - len(survivedTxs)
 }
 
 func (pool *PendingMemPool) Len() int {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
 	return pool.heap.Len()
+}
+
+func (pool *PendingMemPool) Snapshot() []PendingTxInfo {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
+	size := pool.heap.Len()
+	if size == 0 {
+		return nil
+	}
+
+	data := make([]PendingTxInfo, size)
+	copy(data, *pool.heap)
+
+	// big.Int 내부 값 포인터가 오염되지 않도록 Deep Copy
+	for i := 0; i < size; i++ {
+		if data[i].GasTipCap != nil {
+			data[i].GasTipCap = new(big.Int).Set(data[i].GasTipCap)
+		}
+		if data[i].GasFeeCap != nil {
+			data[i].GasFeeCap = new(big.Int).Set(data[i].GasFeeCap)
+		}
+	}
+
+	return data
 }

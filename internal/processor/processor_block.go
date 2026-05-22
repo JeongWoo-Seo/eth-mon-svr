@@ -3,12 +3,20 @@ package processor
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 )
+
+var minedHashPool = sync.Pool{
+	New: func() interface{} {
+		// 초기 캡시티는 프로젝트의 평균 블록당 트랙잭션 수(예: 200~300개)로 잡아두면 좋습니다.
+		return make(map[string]struct{}, 256)
+	},
+}
 
 func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions) ([]*types.Receipt, error) {
 	receipts := make([]*types.Receipt, len(txs))
@@ -64,16 +72,18 @@ func (p *Process) ClearMempool(ctx context.Context, block *types.Block, txs type
 	}
 
 	//sync.Pool에서 슬라이스 메모리 빌리기
-	pSlicePtr := txHashPool.Get().(*[]string)
-	txHashes := (*pSlicePtr)[:0]
-
+	minedHashes := minedHashPool.Get().(map[string]struct{})
 	for _, tx := range txs {
-		txHashes = append(txHashes, tx.Hash().Hex())
+		minedHashes[tx.Hash().Hex()] = struct{}{}
 	}
-	removedCnt := p.state.DeleteBulk(txHashes)
 
-	*pSlicePtr = txHashes     //혹시라도 트랜잭션이 너무 많아 슬라이스의 Capacity가 늘어났다면, 슬라이스 헤더 정보(포인터, 길이, 용량)가 변경
-	txHashPool.Put(pSlicePtr) // 반납하기
+	removedCnt := p.pendingPool.CollectAndClean(minedHashes)
+
+	//모든 데이터 삭제
+	for k := range minedHashes {
+		delete(minedHashes, k)
+	}
+	minedHashPool.Put(minedHashes)
 
 	if removedCnt > 0 {
 		logger.Info(ctx, "Transactions cleared from mempool",

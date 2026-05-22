@@ -37,15 +37,6 @@ var txResultPool = sync.Pool{
 	},
 }
 
-// 이더리움 메인넷 평균 트랜잭션은 150~300개 사이입니다.
-var txHashPool = sync.Pool{
-	New: func() interface{} {
-
-		b := make([]string, 0, 300)
-		return &b
-	},
-}
-
 func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, client *ethclient.Client, gasanalyzer *gasanalyzer.Analyzer) *Process {
 	return &Process{
 		pendingPool: pendingPool,

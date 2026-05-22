@@ -23,7 +23,7 @@ func (p *Process) collectBlockTx() []gasanalyzer.WeightedTip {
 }
 
 func (p *Process) collectPendingTx(nextBaseFee *big.Int, gasLimit uint64) []gasanalyzer.WeightedTip {
-	pendingData := p.state.Snapshot()
+	pendingData := p.pendingPool.Snapshot()
 	pool := make([]gasanalyzer.WeightedTip, 0, len(pendingData))
 
 	for _, tx := range pendingData {
