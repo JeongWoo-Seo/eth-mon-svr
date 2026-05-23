@@ -98,7 +98,7 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 	txResultPool.Put(rPtr)
 }
 
-func (p *Process) ProcessBlock(header *types.Header) (*types.Block, bool) {
+func (p *Process) ProcessBlock(header *types.Header) {
 	ctx := context.Background()
 
 	// 블록 데이터 가져오기
@@ -108,12 +108,15 @@ func (p *Process) ProcessBlock(header *types.Header) (*types.Block, bool) {
 			err,
 			slog.String("system", "ethereum"),
 			slog.String("block_hash", header.Hash().Hex()))
-		return nil, false
+		return
 	}
+
+	//이전 블록 결과 비교
+	p.gasanalyzer.CompareFeeHistory(p.ethClient)
 
 	txs := block.Transactions()
 	if len(txs) == 0 {
-		return block, true
+		return
 	}
 
 	// tx 영수증 가져오기
@@ -125,7 +128,7 @@ func (p *Process) ProcessBlock(header *types.Header) (*types.Block, bool) {
 		)
 		// 영수증은 실패했어도 블록에 포함된건 확실하므로 멤풀은 정리
 		p.ClearMempool(ctx, block, txs)
-		return nil, false
+		return
 	}
 
 	// 블록 데이터 가공
@@ -135,10 +138,8 @@ func (p *Process) ProcessBlock(header *types.Header) (*types.Block, bool) {
 	p.blockstore.AddBlock(blockData)
 	p.ClearMempool(ctx, block, txs)
 
-	// 결과 비교
-	p.gasanalyzer.CompareFeeHistory(p.ethClient)
+	// 블록 기반 tx 데이터 정렬
 
-	return block, true
 }
 
 func (p *Process) AnalyzeGasPrice(latestBlock *types.Block) {

@@ -18,11 +18,11 @@ const (
 
 type Processor interface {
 	GetTxInfo(hashes []common.Hash)
-	ProcessBlock(header *types.Header) (*types.Block, bool)
+	ProcessBlock(header *types.Header)
 	AnalyzeGasPrice(latestBlock *types.Block)
 }
 
-type Pool struct {
+type PendingWorker struct {
 	workers   int
 	jobs      chan string
 	proc      Processor
@@ -30,22 +30,22 @@ type Pool struct {
 	wg        sync.WaitGroup
 }
 
-func NewPool(workers int, porc Processor) *Pool {
-	return &Pool{
+func NewPendingWorker(workers int, porc Processor) *PendingWorker {
+	return &PendingWorker{
 		workers: workers,
 		jobs:    make(chan string, txBufferSize),
 		proc:    porc,
 	}
 }
 
-func (p *Pool) Start(ctx context.Context) {
+func (p *PendingWorker) Start(ctx context.Context) {
 	for i := 0; i < p.workers; i++ {
 		p.wg.Add(1)
 		go p.worker(ctx)
 	}
 }
 
-func (p *Pool) worker(ctx context.Context) {
+func (p *PendingWorker) worker(ctx context.Context) {
 	defer p.wg.Done()
 
 	batch := make([]common.Hash, 0, maxBatchSize)
@@ -83,6 +83,6 @@ func (p *Pool) worker(ctx context.Context) {
 	}
 }
 
-func (p *Pool) Input() chan<- string {
+func (p *PendingWorker) Input() chan<- string {
 	return p.jobs
 }
