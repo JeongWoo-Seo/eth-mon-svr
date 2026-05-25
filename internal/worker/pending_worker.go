@@ -19,7 +19,6 @@ const (
 type Processor interface {
 	GetTxInfo(hashes []common.Hash)
 	ProcessBlock(header *types.Header)
-	AnalyzeGasPrice(latestBlock *types.Block)
 }
 
 type PendingWorker struct {

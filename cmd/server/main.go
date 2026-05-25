@@ -67,7 +67,7 @@ func main() {
 	}
 	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
-	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda)
+	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool)
 	proc := processor.NewProcess(pendingPool, blockstore, ethClient.EthClient, analyzer)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)
@@ -83,11 +83,11 @@ func main() {
 	sub := ingestion.NewSubscriber(cfg.EthRpcWsUrl, blockWorker.Input(), pendingWorker.Input(), dedup)
 	sub.SubscriberStart(ctx)
 
-	logger.Info(ctx, "Monitoring server started.")
-
 	//////////////////////////
 	// gas analysis
 	//////////////////////////
+	logger.Info(ctx, "Monitoring server started.")
+	analyzer.Start(ctx)
 
 	//////////////////////////
 	// server shutdown

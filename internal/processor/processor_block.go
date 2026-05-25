@@ -3,9 +3,12 @@ package processor
 import (
 	"context"
 	"log/slog"
+	"math/big"
+	"slices"
 	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -91,4 +94,49 @@ func (p *Process) ClearMempool(ctx context.Context, block *types.Block, txs type
 			slog.Int("removed_count", removedCnt),
 		)
 	}
+}
+
+func (p *Process) UpdateBlockInfoForAnalysis(currentBlockNumber uint64, baseFee *big.Int, gasUsed, gasLimit uint64) {
+	nextBaseFee := p.gasanalyzer.CalculateNextBaseFee(baseFee, gasUsed, gasLimit)
+	blockData := p.blockstore.GetBlockData()
+
+	if len(blockData) == 0 {
+		return
+	}
+	pool := make([]gasanalyzer.WeightedTip, 0, len(blockData)*200)
+
+	for i, b := range blockData {
+		if i >= len(p.gasanalyzer.DecayTable) {
+			break
+		}
+		decay := p.gasanalyzer.DecayTable[i]
+
+		for _, tx := range b.Txs {
+			pool = append(pool, gasanalyzer.WeightedTip{
+				Tip:    tx.Tip,
+				Weight: tx.GasWeight * decay,
+			})
+		}
+	}
+
+	//내림차순
+	slices.SortFunc(pool, func(a, b gasanalyzer.WeightedTip) int {
+		if a.Tip > b.Tip {
+			return -1
+		}
+		if a.Tip < b.Tip {
+			return 1
+		}
+		return 0
+	})
+
+	// 가스 분석을 위한 블록 정보 업데이트
+	p.gasanalyzer.UpdateLatestBlockData(
+		currentBlockNumber,
+		baseFee,
+		gasUsed,
+		gasLimit,
+		nextBaseFee,
+		pool,
+	)
 }

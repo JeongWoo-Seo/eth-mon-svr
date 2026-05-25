@@ -30,6 +30,7 @@ func (a *Analyzer) EffectiveTip(feeCap, tipCap, baseFee *big.Int) (uint64, bool)
 
 	return result.Uint64(), true
 }
+
 func (a *Analyzer) CalculateNextBaseFee(baseFee *big.Int, gasUsed, gasLimit uint64) *big.Int {
 	if baseFee == nil {
 		return big.NewInt(1_000_000_000) // 기본 1 gwei

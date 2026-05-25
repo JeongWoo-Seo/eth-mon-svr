@@ -14,18 +14,18 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 	preResult := a.latestResult
 	a.mu.Unlock()
 
-	if preResult.BlockNumber == 0 || preResult.Levels == nil {
+	if preResult.NextBlockNumber == 0 || preResult.Levels == nil {
 		return
 	}
 
 	ctx := context.Background()
-	per := []float64{25, 50, 75, 90}
-	history, err := client.FeeHistory(ctx, 1, big.NewInt(int64(preResult.BlockNumber)), per)
+	per := []float64{25, 60, 80, 90}
+	history, err := client.FeeHistory(ctx, 1, big.NewInt(int64(preResult.NextBlockNumber)), per)
 	if err != nil {
 		logger.Error(ctx, "failed to get block fee history",
 			err,
 			"system", "analysis",
-			"block_num", preResult.BlockNumber)
+			"block_num", preResult.NextBlockNumber)
 		return
 	}
 
@@ -57,6 +57,6 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 			}
 		}
 
-		fmt.Printf("BaseFee - 예측 : %d 실제 : %d \n", preResult.NextBaseFee, history.BaseFee[1].Uint64())
+		fmt.Printf("BaseFee - 예측 : %d 실제 : %d \n", preResult.NextBaseFee, history.BaseFee[0].Uint64())
 	}
 }
