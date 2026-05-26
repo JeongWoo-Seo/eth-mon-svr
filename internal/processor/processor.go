@@ -111,6 +111,13 @@ func (p *Process) ProcessBlock(header *types.Header) {
 		return
 	}
 
+	logger.Info(ctx, "Create new block",
+		slog.String("system", "ethereum"),
+		slog.String("block_hash", header.Hash().Hex()))
+
+	//이전 블록 결과 비교
+	p.gasanalyzer.CompareFeeHistory(p.ethClient)
+
 	txs := block.Transactions()
 	if len(txs) == 0 {
 		return
@@ -137,7 +144,4 @@ func (p *Process) ProcessBlock(header *types.Header) {
 
 	// 분석을 위한 블록 및 tx 정보 업데이트
 	p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
-
-	//이전 블록 결과 비교
-	p.gasanalyzer.CompareFeeHistory(p.ethClient)
 }

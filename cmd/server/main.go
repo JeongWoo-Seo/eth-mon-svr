@@ -38,7 +38,7 @@ func main() {
 	//////////////////////////
 	// connect eth
 	//////////////////////////
-	ethClient, err := eth.NewEthClient(cfg.EthRpcHttpUrl)
+	ethClient, err := eth.NewEthClient(cfg.EthAlcRpcHttpUrl)
 	if err != nil {
 		logger.Error(ctx, "failed to connect ethereum rpc",
 			err,
@@ -57,7 +57,7 @@ func main() {
 	//////////////////////////
 	// set pool, processor, mempool
 	//////////////////////////
-	pendingPool := mempool.NewPendingMemPool(300, 30*time.Second)
+	pendingPool := mempool.NewPendingMemPool(400, 30*time.Second)
 	dedup, err := mempool.NewCache(10000, 2*time.Minute)
 	if err != nil {
 		logger.Error(ctx, "failed to initialize mempool cache",
@@ -80,7 +80,7 @@ func main() {
 	//////////////////////////
 	// subscribe eth
 	//////////////////////////
-	sub := ingestion.NewSubscriber(cfg.EthRpcWsUrl, blockWorker.Input(), pendingWorker.Input(), dedup)
+	sub := ingestion.NewSubscriber(cfg.EthAlcRpcWsUrl, cfg.EthInfRpcWsUrl, blockWorker.Input(), pendingWorker.Input(), dedup)
 	sub.SubscriberStart(ctx)
 
 	//////////////////////////

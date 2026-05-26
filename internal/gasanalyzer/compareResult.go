@@ -19,7 +19,7 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 	}
 
 	ctx := context.Background()
-	per := []float64{25, 60, 80, 90}
+	per := []float64{30, 50, 75, 90}
 	history, err := client.FeeHistory(ctx, 1, big.NewInt(int64(preResult.NextBlockNumber)), per)
 	if err != nil {
 		logger.Error(ctx, "failed to get block fee history",

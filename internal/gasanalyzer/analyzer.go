@@ -21,9 +21,9 @@ var targets = []struct {
 	name  string
 	ratio float64
 }{
-	{"low", 0.25},
-	{"market", 0.60},
-	{"fast", 0.80},
+	{"low", 0.30},
+	{"market", 0.50},
+	{"fast", 0.75},
 	{"urgent", 0.90},
 }
 
@@ -112,7 +112,7 @@ func (a *Analyzer) collectPendingTx(nextBaseFee *big.Int, gasLimit uint64) []Wei
 
 		pool = append(pool, WeightedTip{
 			Tip:    tip,
-			Weight: weight * 0.6,
+			Weight: weight * 1.2,
 		})
 	}
 

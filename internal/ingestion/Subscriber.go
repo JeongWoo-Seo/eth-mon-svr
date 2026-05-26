@@ -19,15 +19,17 @@ const (
 )
 
 type Subscriber struct {
-	wsUrl      string
+	AlcWsUrl   string
+	InfWsUrl   string
 	headerChan chan<- *types.Header
 	txHashChan chan<- string
 	dedup      *mempool.Cache
 }
 
-func NewSubscriber(url string, headerChan chan<- *types.Header, txHashChan chan<- string, dedup *mempool.Cache) *Subscriber {
+func NewSubscriber(AlcUrl, InfUrl string, headerChan chan<- *types.Header, txHashChan chan<- string, dedup *mempool.Cache) *Subscriber {
 	return &Subscriber{
-		wsUrl:      url,
+		AlcWsUrl:   AlcUrl,
+		InfWsUrl:   InfUrl,
 		headerChan: headerChan,
 		txHashChan: txHashChan,
 		dedup:      dedup,
@@ -35,8 +37,9 @@ func NewSubscriber(url string, headerChan chan<- *types.Header, txHashChan chan<
 }
 
 func (s *Subscriber) SubscriberStart(ctx context.Context) {
-	go subscription(ctx, s.wsUrl, "Header", "newHeads", headBufferSize, s.headerChan, nil)
-	go subscription(ctx, s.wsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
+	go subscription(ctx, s.AlcWsUrl, "Header", "newHeads", headBufferSize, s.headerChan, nil)
+	go subscription(ctx, s.AlcWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
+	go subscription(ctx, s.InfWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
 }
 
 func subscription[T any](
@@ -117,7 +120,6 @@ func connectAndStream[T any](
 				report.IncPendginRecieved()
 				if txHash, ok := any(data).(string); ok {
 					if dedup != nil && dedup.Seen(txHash) {
-						logger.Info(ctx, "dedup seen")
 						continue // 이미 본 트랜잭션은 채널에 넣지도 않고 무시
 					}
 				}
