@@ -19,7 +19,12 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 	}
 
 	ctx := context.Background()
-	per := []float64{30, 50, 75, 90}
+	per := make([]float64, 0, len(gasPredictionTargets))
+
+	for _, t := range gasPredictionTargets {
+		per = append(per, t.Ratio)
+	}
+
 	history, err := client.FeeHistory(ctx, 1, big.NewInt(int64(preResult.NextBlockNumber)), per)
 	if err != nil {
 		logger.Error(ctx, "failed to get block fee history",
@@ -33,27 +38,26 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 	if len(history.Reward) > 0 && len(history.BaseFee) >= 2 {
 		reward := history.Reward[0]
 
-		com := []struct {
-			name  string
-			index int
-		}{
-			{"low", 0},
-			{"market", 1},
-			{"fast", 2},
-			{"urgent", 3},
-		}
+		for i, t := range gasPredictionTargets {
 
-		for _, c := range com {
-			actualTip := reward[c.index].Uint64()
+			actualTip := reward[i].Uint64()
 
-			if pred, ok := preResult.Levels[c.name]; ok {
-				diff := int64(pred.PriorityFee) - int64(actualTip)
+			if pred, ok := preResult.Levels[t.Name]; ok {
 
-				fmt.Printf("%-10s | %-12d | %-12d | %-10d\n",
-					c.name, pred.PriorityFee, actualTip, diff)
+				diff := int64(pred.PriorityFee) -
+					int64(actualTip)
+
+				fmt.Printf(
+					"%-10s | %-12d | %-12d | %-10d\n",
+					t.Name,
+					pred.PriorityFee,
+					actualTip,
+					diff,
+				)
+
 			} else {
-				// 키가 매칭되지 않을 경우를 대비한 로그
-				fmt.Printf("%-10s | 데이터 없음\n", c.name)
+				fmt.Printf(
+					"%-10s | 데이터 없음\n", t.Name)
 			}
 		}
 

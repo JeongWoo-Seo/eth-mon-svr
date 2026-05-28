@@ -5,9 +5,26 @@ import (
 	"time"
 )
 
+var gasPredictionTargets = []TargetPercentile{
+	{"low", 0.30},
+	{"market", 0.50},
+	{"fast", 0.75},
+	{"urgent", 0.90},
+}
+
+type TargetPercentile struct {
+	Name  string
+	Ratio float64
+}
+
 type WeightedTip struct {
 	Tip    uint64
 	Weight float64
+}
+
+type GasTip struct {
+	Tip uint64
+	Gas uint64
 }
 
 type GasLevel struct {

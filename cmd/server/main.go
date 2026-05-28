@@ -57,7 +57,7 @@ func main() {
 	//////////////////////////
 	// set pool, processor, mempool
 	//////////////////////////
-	pendingPool := mempool.NewPendingMemPool(400, 30*time.Second)
+	pendingPool := mempool.NewPendingMemPool(300, 30*time.Second)
 	dedup, err := mempool.NewCache(10000, 2*time.Minute)
 	if err != nil {
 		logger.Error(ctx, "failed to initialize mempool cache",

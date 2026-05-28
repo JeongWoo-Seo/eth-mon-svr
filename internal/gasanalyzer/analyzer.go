@@ -17,16 +17,6 @@ const (
 	MaxAge = 20
 )
 
-var targets = []struct {
-	name  string
-	ratio float64
-}{
-	{"low", 0.30},
-	{"market", 0.50},
-	{"fast", 0.75},
-	{"urgent", 0.90},
-}
-
 type Analyzer struct {
 	DecayTable      [MaxAge + 1]float64
 	mu              sync.RWMutex
@@ -112,7 +102,7 @@ func (a *Analyzer) collectPendingTx(nextBaseFee *big.Int, gasLimit uint64) []Wei
 
 		pool = append(pool, WeightedTip{
 			Tip:    tip,
-			Weight: weight * 1.2,
+			Weight: weight * 1.8,
 		})
 	}
 
@@ -141,27 +131,27 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 		totalWeight += tip.Weight
 	}
 
-	result := make(map[string]uint64, len(targets))
+	result := make(map[string]uint64, len(gasPredictionTargets))
 	var cumulativeWeight float64
 	targetIdx := 0
 
 	for _, tx := range poolData {
 		cumulativeWeight += tx.Weight
 
-		for targetIdx < len(targets) && cumulativeWeight >= targets[targetIdx].ratio*totalWeight {
-			result[targets[targetIdx].name] = tx.Tip
+		for targetIdx < len(gasPredictionTargets) && cumulativeWeight >= gasPredictionTargets[targetIdx].Ratio*totalWeight {
+			result[gasPredictionTargets[targetIdx].Name] = tx.Tip
 			targetIdx++
 		}
 
-		if targetIdx >= len(targets) {
+		if targetIdx >= len(gasPredictionTargets) {
 			break
 		}
 	}
 
 	//팁이 남은경우 채우기
 	lastTip := poolData[len(poolData)-1].Tip
-	for targetIdx < len(targets) {
-		result[targets[targetIdx].name] = lastTip
+	for targetIdx < len(gasPredictionTargets) {
+		result[gasPredictionTargets[targetIdx].Name] = lastTip
 		targetIdx++
 	}
 
