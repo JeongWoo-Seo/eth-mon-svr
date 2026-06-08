@@ -21,6 +21,7 @@ type Process struct {
 	blockstore  *blockstore.Store
 	ethClient   *ethclient.Client
 	gasanalyzer *gasanalyzer.Analyzer
+	gasOracle   *gasanalyzer.GasOracle
 }
 
 var batchElemPool = sync.Pool{
@@ -37,12 +38,14 @@ var txResultPool = sync.Pool{
 	},
 }
 
-func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, client *ethclient.Client, gasanalyzer *gasanalyzer.Analyzer) *Process {
+func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, client *ethclient.Client,
+	gasanalyzer *gasanalyzer.Analyzer, gasOracle *gasanalyzer.GasOracle) *Process {
 	return &Process{
 		pendingPool: pendingPool,
 		blockstore:  blockstore,
 		ethClient:   client,
 		gasanalyzer: gasanalyzer,
+		gasOracle:   gasOracle,
 	}
 }
 
@@ -76,12 +79,15 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 	ctx := context.Background()
 	err := p.ethClient.Client().BatchCallContext(ctx, elems)
 	if err != nil {
-		logger.Error(ctx, "Batch RPC call failed",
-			err,
-			slog.String("system", "ethereum"),
-			slog.String("action", "batch_get_tx"),
-			slog.Int("batch_size", len(hashes)),
-		)
+		for i, elem := range elems {
+			if elem.Error != nil {
+				logger.Error(ctx,
+					"batch item failed",
+					elem.Error,
+					slog.Int("index", i),
+				)
+			}
+		}
 		return
 	}
 
@@ -116,8 +122,8 @@ func (p *Process) ProcessBlock(header *types.Header) {
 		slog.String("block_hash", header.Hash().Hex()))
 
 	//이전 블록 결과 비교
-	p.gasanalyzer.CompareFeeHistory(p.ethClient)
-
+	//p.gasanalyzer.CompareFeeHistory(p.ethClient)
+	p.gasOracle.CompareFeeHistory(p.ethClient)
 	txs := block.Transactions()
 	if len(txs) == 0 {
 		return
@@ -143,5 +149,7 @@ func (p *Process) ProcessBlock(header *types.Header) {
 	p.ClearMempool(ctx, block, txs)
 
 	// 분석을 위한 블록 및 tx 정보 업데이트
-	p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+	//p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+
+	p.UpdateBlockInfoForAnalysisForHistogram(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
 }

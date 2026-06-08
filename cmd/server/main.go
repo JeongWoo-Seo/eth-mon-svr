@@ -68,7 +68,8 @@ func main() {
 	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool)
-	proc := processor.NewProcess(pendingPool, blockstore, ethClient.EthClient, analyzer)
+	gasOracle := gasanalyzer.NewGasOracle(pendingPool)
+	proc := processor.NewProcess(pendingPool, blockstore, ethClient.EthClient, analyzer, gasOracle)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)
 
@@ -87,8 +88,8 @@ func main() {
 	// gas analysis
 	//////////////////////////
 	logger.Info(ctx, "Monitoring server started.")
-	analyzer.Start(ctx)
-
+	//analyzer.Start(ctx)
+	gasOracle.Start(ctx)
 	//////////////////////////
 	// server shutdown
 	//////////////////////////

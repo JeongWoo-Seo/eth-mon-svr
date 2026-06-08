@@ -35,7 +35,8 @@ type GasLevel struct {
 type GasPrediction struct {
 	NextBlockNumber uint64              `json:"blockNumber"`
 	NextBaseFee     uint64              `json:"nextBaseFee"`
-	Levels          map[string]GasLevel `json:"levels"`
+	Levels1         map[string]GasLevel `json:"levels1"`
+	Levels2         map[string]GasLevel `json:"levels2"`
 	UpdatedAt       time.Time           `json:"updatedAt"`
 }
 

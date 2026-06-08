@@ -14,5 +14,6 @@ type BlockData struct {
 type TxInfo struct {
 	Hash      string
 	Tip       uint64
+	GasUsed   uint64
 	GasWeight float64 // sqrt(gasUsed / gasLimit)
 }

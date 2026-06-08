@@ -62,6 +62,7 @@ func (p *Process) CalculateBlockTxTip(block *types.Block, txs types.Transactions
 		blockData.Txs = append(blockData.Txs, blockstore.TxInfo{
 			Hash:      tx.Hash().Hex(),
 			Tip:       tip,
+			GasUsed:   receipts[i].GasUsed,
 			GasWeight: weight,
 		})
 	}
@@ -138,5 +139,34 @@ func (p *Process) UpdateBlockInfoForAnalysis(currentBlockNumber uint64, baseFee 
 		gasLimit,
 		nextBaseFee,
 		pool,
+	)
+}
+
+func (p *Process) UpdateBlockInfoForAnalysisForHistogram(currentBlockNumber uint64, baseFee *big.Int, gasUsed, gasLimit uint64) {
+	nextBaseFee := p.gasanalyzer.CalculateNextBaseFee(baseFee, gasUsed, gasLimit)
+	blockData := p.blockstore.GetBlockData()
+
+	if len(blockData) == 0 {
+		return
+	}
+	pool := make([]gasanalyzer.GasTip, 0, len(blockData)*200)
+
+	for _, b := range blockData {
+		for _, tx := range b.Txs {
+			pool = append(pool, gasanalyzer.GasTip{
+				Tip: tx.Tip,
+				Gas: tx.GasUsed,
+			})
+		}
+	}
+
+	p.gasOracle.BlockHist.Add(pool)
+
+	p.gasOracle.UpdateLatestBlockData(
+		currentBlockNumber,
+		baseFee,
+		gasUsed,
+		gasLimit,
+		nextBaseFee,
 	)
 }

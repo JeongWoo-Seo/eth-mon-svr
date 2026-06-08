@@ -63,7 +63,6 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	nextBlockNum := a.latestBlockData.BlockNumber + 1
 	nextBaseFee := new(big.Int).Set(a.latestBlockData.NextBaseFee)
 
-	//블록의 팁풀 복사
 	historyPool := make([]WeightedTip, len(a.latestBlockData.TipPool))
 	copy(historyPool, a.latestBlockData.TipPool)
 	a.mu.RUnlock()
@@ -72,15 +71,16 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	pendingData := a.collectPendingTx(a.latestBlockData.NextBaseFee, a.latestBlockData.GasLimit)
 
 	// tx 정보 결합 // 정렬 방법 변경필요
-	combinedPool := make([]WeightedTip, 0, len(historyPool)+len(pendingData))
-	combinedPool = append(combinedPool, historyPool...)
-	combinedPool = append(combinedPool, pendingData...)
+	// combinedPool := make([]WeightedTip, 0, len(historyPool)+len(pendingData))
+	// combinedPool = append(combinedPool, historyPool...)
+	// combinedPool = append(combinedPool, pendingData...)
 
 	//가중 백분위 계산
-	result := a.WeightedPercentiles(combinedPool)
+	result1 := a.WeightedPercentiles(historyPool)
+	result2 := a.WeightedPercentiles(pendingData)
 
 	//결과 업데이트
-	a.UpdateResult(nextBlockNum, nextBaseFee, result)
+	a.UpdateResult(nextBlockNum, nextBaseFee, result1, result2)
 
 	logger.Info(context.Background(), "Gas analysis complete",
 		slog.String("system", "analysis"),
@@ -167,23 +167,31 @@ func defaultValue() map[string]uint64 {
 	}
 }
 
-func (a *Analyzer) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int, result map[string]uint64) {
+func (a *Analyzer) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int, result1 map[string]uint64, result2 map[string]uint64) {
 	u64NextBaseFee := nextBaseFee.Uint64()
-	levels := make(map[string]GasLevel)
-	for p, r := range result {
-		levels[p] = GasLevel{
+	levels1 := make(map[string]GasLevel)
+	for p, r := range result1 {
+		levels1[p] = GasLevel{
 			PriorityFee: r,
 			MaxFee:      u64NextBaseFee + r,
 		}
 	}
 
+	levels2 := make(map[string]GasLevel)
+	for p, r := range result2 {
+		levels2[p] = GasLevel{
+			PriorityFee: r,
+			MaxFee:      u64NextBaseFee + r,
+		}
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	a.latestResult = GasPrediction{
 		NextBlockNumber: nextBlockNum,
 		NextBaseFee:     u64NextBaseFee,
-		Levels:          levels,
+		Levels1:         levels1,
+		Levels2:         levels2,
 		UpdatedAt:       time.Now(),
 	}
 }
