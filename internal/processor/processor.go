@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
@@ -17,11 +18,16 @@ import (
 )
 
 type Process struct {
-	pendingPool *mempool.PendingMemPool
-	blockstore  *blockstore.Store
-	ethClient   *ethclient.Client
-	gasanalyzer *gasanalyzer.Analyzer
-	gasOracle   *gasanalyzer.GasOracle
+	pendingPool  *mempool.PendingMemPool
+	blockstore   *blockstore.Store
+	alcEthClient *ethclient.Client
+	infEthClient *ethclient.Client
+	gasanalyzer  *gasanalyzer.Analyzer
+	gasOracle    *gasanalyzer.GasOracle
+
+	mu             sync.RWMutex
+	isFallbackMode bool
+	fallbackUntil  time.Time
 }
 
 var batchElemPool = sync.Pool{
@@ -38,15 +44,49 @@ var txResultPool = sync.Pool{
 	},
 }
 
-func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, client *ethclient.Client,
+func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, alcClient *ethclient.Client, infClient *ethclient.Client,
 	gasanalyzer *gasanalyzer.Analyzer, gasOracle *gasanalyzer.GasOracle) *Process {
 	return &Process{
-		pendingPool: pendingPool,
-		blockstore:  blockstore,
-		ethClient:   client,
-		gasanalyzer: gasanalyzer,
-		gasOracle:   gasOracle,
+		pendingPool:  pendingPool,
+		blockstore:   blockstore,
+		alcEthClient: alcClient,
+		infEthClient: infClient,
+		gasanalyzer:  gasanalyzer,
+		gasOracle:    gasOracle,
+
+		isFallbackMode: false,
+		fallbackUntil:  time.Now(),
 	}
+}
+
+func (p *Process) ethClientFunc(ctx context.Context, fn func(client *ethclient.Client) error) error {
+	now := time.Now()
+	p.mu.Lock()
+	if p.isFallbackMode && now.After(p.fallbackUntil) {
+		p.isFallbackMode = false
+	}
+	isFallbackMode := p.isFallbackMode && now.Before(p.fallbackUntil)
+	p.mu.Unlock()
+
+	//인프라 백업 클라이언트로 실행
+	if isFallbackMode {
+		return fn(p.infEthClient)
+	}
+
+	// 알케미 클라이언트 실행
+	if err := fn(p.alcEthClient); err == nil {
+		return nil
+	}
+
+	p.mu.Lock()
+	if !p.isFallbackMode {
+		p.isFallbackMode = true
+		p.fallbackUntil = time.Now().Add(1 * time.Minute)
+	}
+	p.mu.Unlock()
+
+	//알케미 실패시 인프라로 다시 실행
+	return fn(p.infEthClient)
 }
 
 func (p *Process) GetTxInfo(hashes []common.Hash) {
@@ -77,17 +117,12 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 	}
 
 	ctx := context.Background()
-	err := p.ethClient.Client().BatchCallContext(ctx, elems)
+	err := p.infEthClient.Client().BatchCallContext(ctx, elems)
 	if err != nil {
-		for i, elem := range elems {
-			if elem.Error != nil {
-				logger.Error(ctx,
-					"batch item failed",
-					elem.Error,
-					slog.Int("index", i),
-				)
-			}
-		}
+		logger.Error(ctx, "Failed to get tx info",
+			err,
+			slog.String("system", "ethereum"),
+			slog.Int("tx size", len(elems)))
 		return
 	}
 
@@ -107,14 +142,17 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 func (p *Process) ProcessBlock(header *types.Header) {
 	ctx := context.Background()
 
-	// 블록 데이터 가져오기
-	block, err := p.ethClient.BlockByHash(ctx, header.Hash())
+	block, err := p.alcEthClient.BlockByHash(ctx, header.Hash())
 	if err != nil {
 		logger.Error(ctx, "Failed to fetch block by hash",
 			err,
 			slog.String("system", "ethereum"),
 			slog.String("block_hash", header.Hash().Hex()))
+
+		// pending 데이터 삭제 - 오류 발생시 mempool에 tx가 계속 남아 있는 현상이 발생하여 오류발생시 모든 tx를 삭제
+		p.ClearMempool(ctx)
 		return
+
 	}
 
 	logger.Info(ctx, "Create new block",
@@ -122,8 +160,8 @@ func (p *Process) ProcessBlock(header *types.Header) {
 		slog.String("block_hash", header.Hash().Hex()))
 
 	//이전 블록 결과 비교
-	//p.gasanalyzer.CompareFeeHistory(p.ethClient)
-	p.gasOracle.CompareFeeHistory(p.ethClient)
+	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
+	//p.gasOracle.CompareFeeHistory(p.alcEthClient)
 	txs := block.Transactions()
 	if len(txs) == 0 {
 		return
@@ -137,7 +175,7 @@ func (p *Process) ProcessBlock(header *types.Header) {
 			slog.String("system", "ethereum"),
 		)
 		// 영수증은 실패했어도 블록에 포함된건 확실하므로 멤풀은 정리
-		p.ClearMempool(ctx, block, txs)
+		p.ClearMempoolToTx(ctx, block, txs)
 		return
 	}
 
@@ -146,10 +184,10 @@ func (p *Process) ProcessBlock(header *types.Header) {
 
 	//데이터 저장
 	p.blockstore.AddBlock(blockData)
-	p.ClearMempool(ctx, block, txs)
+	p.ClearMempoolToTx(ctx, block, txs)
 
 	// 분석을 위한 블록 및 tx 정보 업데이트
-	//p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+	p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
 
-	p.UpdateBlockInfoForAnalysisForHistogram(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+	//p.UpdateBlockInfoForAnalysisForHistogram(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
 }

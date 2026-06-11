@@ -38,7 +38,7 @@ func main() {
 	//////////////////////////
 	// connect eth
 	//////////////////////////
-	ethClient, err := eth.NewEthClient(cfg.EthAlcRpcHttpUrl)
+	alcEthClient, err := eth.NewEthClient(cfg.EthAlcRpcHttpUrl)
 	if err != nil {
 		logger.Error(ctx, "failed to connect ethereum rpc",
 			err,
@@ -47,7 +47,18 @@ func main() {
 		)
 		panic(err)
 	}
-	defer ethClient.Close()
+	defer alcEthClient.Close()
+
+	infEthClient, err := eth.NewEthClient(cfg.EthInfRpcHttpUrl)
+	if err != nil {
+		logger.Error(ctx, "failed to connect ethereum rpc",
+			err,
+			"system", "ethereum",
+			"action", "connect",
+		)
+		panic(err)
+	}
+	defer infEthClient.Close()
 
 	logger.Info(ctx, "ethereum connected",
 		slog.String("system", "ethereum"),
@@ -57,7 +68,7 @@ func main() {
 	//////////////////////////
 	// set pool, processor, mempool
 	//////////////////////////
-	pendingPool := mempool.NewPendingMemPool(300, 30*time.Second)
+	pendingPool := mempool.NewPendingMemPool(200, 30*time.Second)
 	dedup, err := mempool.NewCache(10000, 2*time.Minute)
 	if err != nil {
 		logger.Error(ctx, "failed to initialize mempool cache",
@@ -69,7 +80,7 @@ func main() {
 
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool)
 	gasOracle := gasanalyzer.NewGasOracle(pendingPool)
-	proc := processor.NewProcess(pendingPool, blockstore, ethClient.EthClient, analyzer, gasOracle)
+	proc := processor.NewProcess(pendingPool, blockstore, alcEthClient.EthClient, infEthClient.EthClient, analyzer, gasOracle)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)
 
@@ -88,8 +99,8 @@ func main() {
 	// gas analysis
 	//////////////////////////
 	logger.Info(ctx, "Monitoring server started.")
-	//analyzer.Start(ctx)
-	gasOracle.Start(ctx)
+	analyzer.Start(ctx)
+	//gasOracle.Start(ctx)
 	//////////////////////////
 	// server shutdown
 	//////////////////////////

@@ -80,6 +80,20 @@ func (pool *PendingMemPool) PushBatch(txs []*types.Transaction) {
 	}
 }
 
+func (pool *PendingMemPool) Clear() {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	if pool.heap != nil {
+		for i := range *pool.heap {
+			_ = i
+		}
+
+		*pool.heap = make(minTipHeap, 0, pool.maxSize)
+	}
+	heap.Init(pool.heap)
+}
+
 // 오래된 tx이거나 block에 포함된 tx는 mempool에서 제외
 func (pool *PendingMemPool) CollectAndClean(minedHashes map[string]struct{}) int {
 	pool.mu.Lock()

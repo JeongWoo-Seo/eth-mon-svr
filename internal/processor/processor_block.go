@@ -11,6 +11,7 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -33,7 +34,10 @@ func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions
 		}
 	}
 
-	if err := p.ethClient.Client().BatchCallContext(ctx, elems); err != nil {
+	err := p.ethClientFunc(ctx, func(client *ethclient.Client) error {
+		return client.Client().BatchCallContext(ctx, elems)
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -70,7 +74,11 @@ func (p *Process) CalculateBlockTxTip(block *types.Block, txs types.Transactions
 	return blockData
 }
 
-func (p *Process) ClearMempool(ctx context.Context, block *types.Block, txs types.Transactions) {
+func (p *Process) ClearMempool(ctx context.Context) {
+	p.pendingPool.Clear()
+}
+
+func (p *Process) ClearMempoolToTx(ctx context.Context, block *types.Block, txs types.Transactions) {
 	if len(txs) == 0 {
 		return
 	}
