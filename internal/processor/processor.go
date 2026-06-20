@@ -117,7 +117,7 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 	}
 
 	ctx := context.Background()
-	err := p.infEthClient.Client().BatchCallContext(ctx, elems)
+	err := p.alcEthClient.Client().BatchCallContext(ctx, elems)
 	if err != nil {
 		logger.Error(ctx, "Failed to get tx info",
 			err,
@@ -142,6 +142,7 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 func (p *Process) ProcessBlock(header *types.Header) {
 	ctx := context.Background()
 
+	//retry 코드 추가 필요
 	block, err := p.alcEthClient.BlockByHash(ctx, header.Hash())
 	if err != nil {
 		logger.Error(ctx, "Failed to fetch block by hash",
@@ -152,16 +153,12 @@ func (p *Process) ProcessBlock(header *types.Header) {
 		// pending 데이터 삭제 - 오류 발생시 mempool에 tx가 계속 남아 있는 현상이 발생하여 오류발생시 모든 tx를 삭제
 		p.ClearMempool(ctx)
 		return
-
 	}
 
 	logger.Info(ctx, "Create new block",
 		slog.String("system", "ethereum"),
 		slog.String("block_hash", header.Hash().Hex()))
 
-	//이전 블록 결과 비교
-	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
-	//p.gasOracle.CompareFeeHistory(p.alcEthClient)
 	txs := block.Transactions()
 	if len(txs) == 0 {
 		return
@@ -186,8 +183,10 @@ func (p *Process) ProcessBlock(header *types.Header) {
 	p.blockstore.AddBlock(blockData)
 	p.ClearMempoolToTx(ctx, block, txs)
 
-	// 분석을 위한 블록 및 tx 정보 업데이트
-	p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+	//이전 블록 결과 비교
+	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
 
-	//p.UpdateBlockInfoForAnalysisForHistogram(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+	// 분석을 위한 블록 및 tx 정보 업데이트 //각 block에 대한 결과값 계산
+	p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+	p.UpdateBlockInfoForAnalysisForHistogram(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
 }

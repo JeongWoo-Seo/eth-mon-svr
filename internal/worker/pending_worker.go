@@ -12,7 +12,7 @@ import (
 
 const (
 	maxBatchSize  = 20
-	flushInterval = 300 * time.Millisecond
+	flushInterval = 100 * time.Millisecond
 	txBufferSize  = 50000
 )
 

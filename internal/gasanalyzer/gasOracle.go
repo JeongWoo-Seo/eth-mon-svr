@@ -3,6 +3,7 @@ package gasanalyzer
 import (
 	"context"
 	"log/slog"
+	"math"
 	"math/big"
 	"sync"
 	"time"
@@ -79,14 +80,14 @@ func (o *GasOracle) GasPrediction() {
 	o.mu.RUnlock()
 
 	// Pending Histogram 갱신
-	pendingTips := o.collectPendingTx(nextBaseFee)
+	pendingTips := o.collectPendingTx(o.latestBlockData.NextBaseFee)
 
 	o.PendingHist.Reset()
 	o.PendingHist.Add(pendingTips)
 
 	// Percentile 계산
-	blockPrice, blockErr := o.BlockHist.PercentileGas(gasPredictionTargets)
-	pendingPrice, pendingErr := o.PendingHist.PercentileGas(gasPredictionTargets)
+	blockPrice, blockErr := o.BlockHist.PercentileGas(GasPredictionTargets)
+	pendingPrice, pendingErr := o.PendingHist.PercentileGas(GasPredictionTargets)
 
 	// 둘 다 실패한 경우만 에러
 	if blockErr != nil && pendingErr != nil {
@@ -139,10 +140,10 @@ func (o *GasOracle) collectPendingTx(nextBaseFee *big.Int) []GasTip {
 		if !tip.IsUint64() {
 			continue
 		}
-
+		adjustedGas := uint64(math.Round(math.Sqrt(float64(tx.Gas))))
 		pool = append(pool, GasTip{
 			Tip: tip.Uint64(),
-			Gas: tx.Gas,
+			Gas: adjustedGas,
 		})
 	}
 
@@ -172,8 +173,11 @@ func (o *GasOracle) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int, resu
 	o.latestResult = GasPrediction{
 		NextBlockNumber: nextBlockNum,
 		NextBaseFee:     u64NextBaseFee,
-		Levels1:         levels1,
-		Levels2:         levels2,
-		UpdatedAt:       time.Now(),
+
+		UpdatedAt: time.Now(),
 	}
+}
+
+func CalculateWeightForGasUsed(gasUsed uint64) float64 {
+	return math.Sqrt(float64(gasUsed))
 }

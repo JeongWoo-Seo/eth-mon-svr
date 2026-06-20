@@ -24,11 +24,13 @@ type Analyzer struct {
 	latestBlockData BlockAnalysisData
 
 	pendingPool *mempool.PendingMemPool
+	gasOracle   *GasOracle
 }
 
-func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool) *Analyzer {
+func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, gasOracle *GasOracle) *Analyzer {
 	a := &Analyzer{
 		pendingPool: pendingPool,
+		gasOracle:   gasOracle,
 	}
 
 	for age := 0; age < MaxAge; age++ {
@@ -62,25 +64,18 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	a.mu.RLock()
 	nextBlockNum := a.latestBlockData.BlockNumber + 1
 	nextBaseFee := new(big.Int).Set(a.latestBlockData.NextBaseFee)
-
-	historyPool := make([]WeightedTip, len(a.latestBlockData.TipPool))
-	copy(historyPool, a.latestBlockData.TipPool)
 	a.mu.RUnlock()
 
 	//pending tx weight 계산
 	pendingData := a.collectPendingTx(a.latestBlockData.NextBaseFee, a.latestBlockData.GasLimit)
 
-	// tx 정보 결합 // 정렬 방법 변경필요
-	// combinedPool := make([]WeightedTip, 0, len(historyPool)+len(pendingData))
-	// combinedPool = append(combinedPool, historyPool...)
-	// combinedPool = append(combinedPool, pendingData...)
-
 	//가중 백분위 계산
-	result1 := a.WeightedPercentiles(historyPool)
-	result2 := a.WeightedPercentiles(pendingData)
+	peingResult := a.WeightedPercentiles(pendingData)
 
 	//결과 업데이트
-	a.UpdateResult(nextBlockNum, nextBaseFee, result1, result2)
+	a.UpdateAnalPendingTxPredictionGasResult(peingResult)
+
+	a.UpdateResult(nextBlockNum, nextBaseFee)
 
 	logger.Info(context.Background(), "Gas analysis complete",
 		slog.String("system", "analysis"),
@@ -102,7 +97,7 @@ func (a *Analyzer) collectPendingTx(nextBaseFee *big.Int, gasLimit uint64) []Wei
 
 		pool = append(pool, WeightedTip{
 			Tip:    tip,
-			Weight: weight * 1.8,
+			Weight: weight,
 		})
 	}
 
@@ -131,27 +126,27 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 		totalWeight += tip.Weight
 	}
 
-	result := make(map[string]uint64, len(gasPredictionTargets))
+	result := make(map[string]uint64, len(GasPredictionTargets))
 	var cumulativeWeight float64
 	targetIdx := 0
 
 	for _, tx := range poolData {
 		cumulativeWeight += tx.Weight
 
-		for targetIdx < len(gasPredictionTargets) && cumulativeWeight >= gasPredictionTargets[targetIdx].Ratio*totalWeight {
-			result[gasPredictionTargets[targetIdx].Name] = tx.Tip
+		for targetIdx < len(GasPredictionTargets) && cumulativeWeight >= GasPredictionTargets[targetIdx].Ratio*totalWeight {
+			result[GasPredictionTargets[targetIdx].Name] = tx.Tip
 			targetIdx++
 		}
 
-		if targetIdx >= len(gasPredictionTargets) {
+		if targetIdx >= len(GasPredictionTargets) {
 			break
 		}
 	}
 
 	//팁이 남은경우 채우기
 	lastTip := poolData[len(poolData)-1].Tip
-	for targetIdx < len(gasPredictionTargets) {
-		result[gasPredictionTargets[targetIdx].Name] = lastTip
+	for targetIdx < len(GasPredictionTargets) {
+		result[GasPredictionTargets[targetIdx].Name] = lastTip
 		targetIdx++
 	}
 
@@ -167,33 +162,16 @@ func defaultValue() map[string]uint64 {
 	}
 }
 
-func (a *Analyzer) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int, result1 map[string]uint64, result2 map[string]uint64) {
-	u64NextBaseFee := nextBaseFee.Uint64()
-	levels1 := make(map[string]GasLevel)
-	for p, r := range result1 {
-		levels1[p] = GasLevel{
-			PriorityFee: r,
-			MaxFee:      u64NextBaseFee + r,
-		}
-	}
-
-	levels2 := make(map[string]GasLevel)
-	for p, r := range result2 {
-		levels2[p] = GasLevel{
-			PriorityFee: r,
-			MaxFee:      u64NextBaseFee + r,
-		}
-	}
+func (a *Analyzer) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.latestResult = GasPrediction{
-		NextBlockNumber: nextBlockNum,
-		NextBaseFee:     u64NextBaseFee,
-		Levels1:         levels1,
-		Levels2:         levels2,
-		UpdatedAt:       time.Now(),
+	a.latestResult.NextBlockNumber = nextBlockNum
+	if nextBaseFee != nil {
+		a.latestResult.NextBaseFee = nextBaseFee.Uint64()
 	}
+
+	a.latestResult.UpdatedAt = time.Now()
 }
 
 func (a *Analyzer) GetPrediction() GasPrediction {
@@ -207,7 +185,6 @@ func (a *Analyzer) UpdateLatestBlockData(
 	baseFee *big.Int,
 	gasUsed, gasLimit uint64,
 	nextBaseFee *big.Int,
-	pool []WeightedTip,
 ) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -222,7 +199,82 @@ func (a *Analyzer) UpdateLatestBlockData(
 		NextBaseFee: tmNextBaseFee,
 		GasUsed:     gasUsed,
 		GasLimit:    gasLimit,
-		TipPool:     pool,
 		UpdatedAt:   time.Now(),
+	}
+}
+
+func (a *Analyzer) UpdateAnalBlockTxPredictionGasResult(result map[string]uint64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.latestResult.analyzerBlock = make(map[string]GasLevel, len(result))
+
+	var baseFee uint64
+	if a.latestBlockData.NextBaseFee != nil {
+		baseFee = a.latestBlockData.NextBaseFee.Uint64()
+	}
+
+	for level, fee := range result {
+		a.latestResult.analyzerBlock[level] = GasLevel{
+			PriorityFee: fee,
+			MaxFee:      baseFee + fee,
+		}
+	}
+}
+
+func (a *Analyzer) UpdateAnalPendingTxPredictionGasResult(result map[string]uint64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.latestResult.analyzerPending = make(map[string]GasLevel, len(result))
+
+	var baseFee uint64
+	if a.latestBlockData.NextBaseFee != nil {
+		baseFee = a.latestBlockData.NextBaseFee.Uint64()
+	}
+
+	for level, fee := range result {
+		a.latestResult.analyzerPending[level] = GasLevel{
+			PriorityFee: fee,
+			MaxFee:      baseFee + fee,
+		}
+	}
+}
+
+func (a *Analyzer) UpdateOracleBlockTxPredictionGasResult(result map[string]uint64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.latestResult.oracleBlock = make(map[string]GasLevel, len(result))
+
+	var baseFee uint64
+	if a.latestBlockData.NextBaseFee != nil {
+		baseFee = a.latestBlockData.NextBaseFee.Uint64()
+	}
+
+	for level, fee := range result {
+		a.latestResult.oracleBlock[level] = GasLevel{
+			PriorityFee: fee,
+			MaxFee:      baseFee + fee,
+		}
+	}
+}
+
+func (a *Analyzer) UpdateOraclePendingTxPredictionGasResult(result map[string]uint64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.latestResult.oraclePending = make(map[string]GasLevel, len(result))
+
+	var baseFee uint64
+	if a.latestBlockData.NextBaseFee != nil {
+		baseFee = a.latestBlockData.NextBaseFee.Uint64()
+	}
+
+	for level, fee := range result {
+		a.latestResult.oraclePending[level] = GasLevel{
+			PriorityFee: fee,
+			MaxFee:      baseFee + fee,
+		}
 	}
 }

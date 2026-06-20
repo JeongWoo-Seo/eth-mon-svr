@@ -5,9 +5,16 @@ import (
 	"time"
 )
 
-var gasPredictionTargets = []TargetPercentile{
-	{"low", 0.30},
-	{"market", 0.50},
+var GasPredictionTargets = []TargetPercentile{
+	//{"market3", 0.50},
+	{"fast", 0.75},
+	{"urgent", 0.90},
+}
+
+var GasAnalysisTargets = []TargetPercentile{
+	{"market1", 0.40},
+	{"market2", 0.50},
+	{"market3", 0.60},
 	{"fast", 0.75},
 	{"urgent", 0.90},
 }
@@ -33,11 +40,13 @@ type GasLevel struct {
 }
 
 type GasPrediction struct {
-	NextBlockNumber uint64              `json:"blockNumber"`
-	NextBaseFee     uint64              `json:"nextBaseFee"`
-	Levels1         map[string]GasLevel `json:"levels1"`
-	Levels2         map[string]GasLevel `json:"levels2"`
-	UpdatedAt       time.Time           `json:"updatedAt"`
+	NextBlockNumber uint64 `json:"blockNumber"`
+	NextBaseFee     uint64 `json:"nextBaseFee"`
+	oracleBlock     map[string]GasLevel
+	oraclePending   map[string]GasLevel
+	analyzerBlock   map[string]GasLevel
+	analyzerPending map[string]GasLevel
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 type BlockAnalysisData struct {

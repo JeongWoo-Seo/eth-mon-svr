@@ -68,7 +68,7 @@ func main() {
 	//////////////////////////
 	// set pool, processor, mempool
 	//////////////////////////
-	pendingPool := mempool.NewPendingMemPool(200, 30*time.Second)
+	pendingPool := mempool.NewPendingMemPool(400, 20*time.Second)
 	dedup, err := mempool.NewCache(10000, 2*time.Minute)
 	if err != nil {
 		logger.Error(ctx, "failed to initialize mempool cache",
@@ -78,8 +78,8 @@ func main() {
 	}
 	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
-	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool)
 	gasOracle := gasanalyzer.NewGasOracle(pendingPool)
+	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, gasOracle)
 	proc := processor.NewProcess(pendingPool, blockstore, alcEthClient.EthClient, infEthClient.EthClient, analyzer, gasOracle)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)

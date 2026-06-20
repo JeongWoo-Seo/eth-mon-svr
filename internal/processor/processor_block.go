@@ -3,8 +3,8 @@ package processor
 import (
 	"context"
 	"log/slog"
+	"math"
 	"math/big"
-	"slices"
 	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
@@ -128,16 +128,7 @@ func (p *Process) UpdateBlockInfoForAnalysis(currentBlockNumber uint64, baseFee 
 		}
 	}
 
-	//내림차순
-	slices.SortFunc(pool, func(a, b gasanalyzer.WeightedTip) int {
-		if a.Tip > b.Tip {
-			return -1
-		}
-		if a.Tip < b.Tip {
-			return 1
-		}
-		return 0
-	})
+	blockResult := p.gasanalyzer.WeightedPercentiles(pool)
 
 	// 가스 분석을 위한 블록 정보 업데이트
 	p.gasanalyzer.UpdateLatestBlockData(
@@ -146,8 +137,8 @@ func (p *Process) UpdateBlockInfoForAnalysis(currentBlockNumber uint64, baseFee 
 		gasUsed,
 		gasLimit,
 		nextBaseFee,
-		pool,
 	)
+	p.gasanalyzer.UpdateAnalBlockTxPredictionGasResult(blockResult)
 }
 
 func (p *Process) UpdateBlockInfoForAnalysisForHistogram(currentBlockNumber uint64, baseFee *big.Int, gasUsed, gasLimit uint64) {
@@ -161,20 +152,29 @@ func (p *Process) UpdateBlockInfoForAnalysisForHistogram(currentBlockNumber uint
 
 	for _, b := range blockData {
 		for _, tx := range b.Txs {
+			adjustedGas := uint64(math.Round(math.Sqrt(float64(tx.GasUsed))))
 			pool = append(pool, gasanalyzer.GasTip{
 				Tip: tx.Tip,
-				Gas: tx.GasUsed,
+				Gas: adjustedGas,
 			})
 		}
 	}
 
+	p.gasOracle.BlockHist.Reset()
 	p.gasOracle.BlockHist.Add(pool)
+	blockResult, err := p.gasOracle.BlockHist.PercentileGas(gasanalyzer.GasPredictionTargets)
+	if err != nil {
 
-	p.gasOracle.UpdateLatestBlockData(
+	}
+
+	// 향후 합칠 예정
+	p.gasanalyzer.UpdateLatestBlockData(
 		currentBlockNumber,
 		baseFee,
 		gasUsed,
 		gasLimit,
 		nextBaseFee,
+		//blockResult,
 	)
+	p.gasanalyzer.UpdateOracleBlockTxPredictionGasResult(blockResult)
 }

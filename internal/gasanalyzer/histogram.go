@@ -2,6 +2,7 @@ package gasanalyzer
 
 import (
 	"errors"
+	"math"
 	"sync"
 )
 
@@ -98,10 +99,15 @@ func (h *Histogram) PercentileGas(targets []TargetPercentile) (map[string]uint64
 	}
 
 	result := make(map[string]uint64)
-	buckets := h.Snapshot()
-	var totalGas float64
+	buckets := h.Snapshot() // 스냅샷으로 동기화된 버킷 슬라이스 획득
 
-	for _, b := range h.Buckets {
+	if len(buckets) == 0 {
+		return nil, errors.New("no data in histogram snapshots")
+	}
+
+	// 1. 전체 가중치(이미 Sqrt 처리된 가스의 총합) 계산
+	var totalGas float64
+	for _, b := range buckets {
 		totalGas += float64(b.gasSum)
 	}
 
@@ -109,33 +115,60 @@ func (h *Histogram) PercentileGas(targets []TargetPercentile) (map[string]uint64
 		return nil, errors.New("no data in histogram")
 	}
 
-	bucketIdx := 0
-	var curGasSum float64
-
+	// 2. 각 가스 레벨(Target)별 독립적인 백분위 연산
 	for _, target := range targets {
+		// 목표로 하는 누적 가스량 지점 계산
 		targetValue := totalGas * target.Ratio
+
+		// ✨ [핵심 교정] 각 타겟마다 인덱스와 누적 가스 합산량을 0에서부터 새로 시작합니다.
+		bucketIdx := 0
+		var curGasSum float64
+		found := false
 
 		for bucketIdx < len(buckets) {
 			b := buckets[bucketIdx]
 			weight := float64(b.gasSum)
+
+			// 현재 버킷까지 더했을 때 목표치를 돌파하는지 확인
 			if curGasSum+weight >= targetValue {
-				if b.gasSum == 0 { // gassum 이 0면 최하값으로
+				if b.gasSum == 0 || b.maxTip <= b.minTip {
+					// 가스가 없거나 단일 가격 버킷이면 최하값 선택
 					result[target.Name] = b.minTip
-				} else { // 아니면 비율로 적용
+				} else {
+					// 버킷 내부에서 목표 지점이 어디쯤 위치하는지 비율(ratio) 계산
 					r := targetValue - curGasSum
 					ratio := r / weight
-					tip := b.minTip + uint64(float64(b.maxTip-b.minTip)*ratio)
+
+					// Floating-point 연산 오차 방지를 위한 상하한 클램핑
+					if ratio < 0 {
+						ratio = 0
+					}
+					if ratio > 1 {
+						ratio = 1
+					}
+
+					// 버킷의 minTip과 maxTip 사이를 ratio 비율만큼 정교하게 보간(Interpolation)
+					// 소수점 처리를 위해 math.Round 적용
+					tip := b.minTip + uint64(math.Round(float64(b.maxTip-b.minTip)*ratio))
+
+					// 계산된 결과가 해당 버킷의 최대 경계선을 넘지 않도록 안전장치
+					if tip > b.maxTip {
+						tip = b.maxTip
+					}
 					result[target.Name] = tip
 				}
+				found = true
 				break
 			}
 
+			// 목표치에 도달하지 못했다면 가중치를 누적하고 다음 버킷으로 이동
 			curGasSum += weight
 			bucketIdx++
 		}
 
-		// bucket 내부를 다 확인 후 아직 결과를 다 채우지 못했을 때 최상위 결과값으로 채움
-		if bucketIdx >= len(buckets) {
+		// 3. 만약 모든 버킷을 다 돌았는데도 targetValue를 못 채웠다면 (예: ratio가 1.0인 경우 등)
+		// 가장 최상위에 위치한 버킷의 maxTip을 부여하여 안전하게 마감합니다.
+		if !found {
 			result[target.Name] = buckets[len(buckets)-1].maxTip
 		}
 	}
