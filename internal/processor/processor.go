@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"golang.org/x/time/rate"
 )
 
 type Process struct {
@@ -23,7 +24,8 @@ type Process struct {
 	alcEthClient *ethclient.Client
 	infEthClient *ethclient.Client
 	gasanalyzer  *gasanalyzer.Analyzer
-	gasOracle    *gasanalyzer.GasOracle
+
+	limiter *rate.Limiter
 
 	mu             sync.RWMutex
 	isFallbackMode bool
@@ -45,14 +47,15 @@ var txResultPool = sync.Pool{
 }
 
 func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, alcClient *ethclient.Client, infClient *ethclient.Client,
-	gasanalyzer *gasanalyzer.Analyzer, gasOracle *gasanalyzer.GasOracle) *Process {
+	gasanalyzer *gasanalyzer.Analyzer) *Process {
 	return &Process{
 		pendingPool:  pendingPool,
 		blockstore:   blockstore,
 		alcEthClient: alcClient,
 		infEthClient: infClient,
 		gasanalyzer:  gasanalyzer,
-		gasOracle:    gasOracle,
+
+		limiter: rate.NewLimiter(rate.Limit(200), 300),
 
 		isFallbackMode: false,
 		fallbackUntil:  time.Now(),
@@ -142,7 +145,9 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 func (p *Process) ProcessBlock(header *types.Header) {
 	ctx := context.Background()
 
-	//retry 코드 추가 필요
+	//이전 블록 결과 비교
+	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
+
 	block, err := p.alcEthClient.BlockByHash(ctx, header.Hash())
 	if err != nil {
 		logger.Error(ctx, "Failed to fetch block by hash",
@@ -183,10 +188,7 @@ func (p *Process) ProcessBlock(header *types.Header) {
 	p.blockstore.AddBlock(blockData)
 	p.ClearMempoolToTx(ctx, block, txs)
 
-	//이전 블록 결과 비교
-	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
-
 	// 분석을 위한 블록 및 tx 정보 업데이트 //각 block에 대한 결과값 계산
 	p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
-	p.UpdateBlockInfoForAnalysisForHistogram(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+	//p.UpdateBlockInfoForAnalysisForHistogram(ctx, block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
 }

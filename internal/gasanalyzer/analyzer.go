@@ -24,13 +24,13 @@ type Analyzer struct {
 	latestBlockData BlockAnalysisData
 
 	pendingPool *mempool.PendingMemPool
-	gasOracle   *GasOracle
+	BlockHist   *Histogram
 }
 
-func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, gasOracle *GasOracle) *Analyzer {
+func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool) *Analyzer {
 	a := &Analyzer{
 		pendingPool: pendingPool,
-		gasOracle:   gasOracle,
+		BlockHist:   NewHistogram(),
 	}
 
 	for age := 0; age < MaxAge; age++ {
@@ -45,7 +45,7 @@ func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, gasOracle *
 }
 
 func (a *Analyzer) Start(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	logger.Info(ctx, "Gas analyzer started")
@@ -126,28 +126,84 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 		totalWeight += tip.Weight
 	}
 
-	result := make(map[string]uint64, len(GasPredictionTargets))
+	analysisResults := make([]float64, len(GasAnalysisTargets))
 	var cumulativeWeight float64
-	targetIdx := 0
+	analysisIdx := 0
 
 	for _, tx := range poolData {
 		cumulativeWeight += tx.Weight
 
-		for targetIdx < len(GasPredictionTargets) && cumulativeWeight >= GasPredictionTargets[targetIdx].Ratio*totalWeight {
-			result[GasPredictionTargets[targetIdx].Name] = tx.Tip
-			targetIdx++
+		for analysisIdx < len(GasAnalysisTargets) && cumulativeWeight >= GasAnalysisTargets[analysisIdx]*totalWeight {
+			analysisResults[analysisIdx] = float64(tx.Tip)
+			analysisIdx++
 		}
 
-		if targetIdx >= len(GasPredictionTargets) {
+		if analysisIdx >= len(GasAnalysisTargets) {
 			break
 		}
 	}
 
 	//팁이 남은경우 채우기
-	lastTip := poolData[len(poolData)-1].Tip
-	for targetIdx < len(GasPredictionTargets) {
-		result[GasPredictionTargets[targetIdx].Name] = lastTip
-		targetIdx++
+	lastTip := float64(poolData[len(poolData)-1].Tip)
+	for analysisIdx < len(GasAnalysisTargets) {
+		analysisResults[analysisIdx] = lastTip
+		analysisIdx++
+	}
+
+	//P50,P75,P90
+	result := make(map[string]uint64, len(GasPredictionTargets))
+
+	for _, target := range GasPredictionTargets {
+		groupKey := target.Name
+		if groupKey == "market" {
+			groupKey = "p50"
+		}
+		if groupKey == "fast" {
+			groupKey = "p75"
+		}
+		if groupKey == "urgent" {
+			groupKey = "p90"
+		}
+
+		group, exist := PredictionGroups[groupKey]
+
+		// 그룹 설정이 없거나 비어있다면, 기존처럼 단일 분위수(Fallback) 추출
+		if !exist || len(group) == 0 {
+			// 0.40부터 0.05 단위이므로 안전하게 반올림하여 인덱스 계산
+			idx := int(((target.Ratio - 0.40) / 0.05) + 0.5)
+			if idx >= 0 && idx < len(analysisResults) {
+				result[target.Name] = uint64(analysisResults[idx] + 0.5)
+			} else {
+				result[target.Name] = 0
+			}
+			continue
+		}
+
+		var sumTips float64
+		var sumWeights float64
+		for _, wp := range group {
+			// 인덱스 바운드 체크 추가 (안전성 보장)
+			if wp.Index >= 0 && wp.Index < len(analysisResults) {
+				sumTips += analysisResults[wp.Index] * wp.Weight
+				sumWeights += wp.Weight
+			}
+		}
+
+		// 2. 최종 가중치 계산 및 반올림 처리
+		if sumWeights > 0 {
+			finalTip := sumTips / sumWeights
+
+			// [도메인 보정 로직 추가 가능 기점]
+			// 예: urgent의 경우 하방 평균으로 인해 값이 낮아지므로 원래 P90 값보다 낮아지지 않도록 방어선 구축
+			if groupKey == "p90" && finalTip < analysisResults[P90] {
+				// 가중 평균이 실제 P90보다 낮다면 안전을 위해 실제 P90 값을 선택하거나 패널티 상향
+				finalTip = analysisResults[P90]
+			}
+
+			result[target.Name] = uint64(finalTip + 0.5)
+		} else {
+			result[target.Name] = 0
+		}
 	}
 
 	return result

@@ -78,9 +78,8 @@ func main() {
 	}
 	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
-	gasOracle := gasanalyzer.NewGasOracle(pendingPool)
-	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, gasOracle)
-	proc := processor.NewProcess(pendingPool, blockstore, alcEthClient.EthClient, infEthClient.EthClient, analyzer, gasOracle)
+	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool)
+	proc := processor.NewProcess(pendingPool, blockstore, alcEthClient.EthClient, infEthClient.EthClient, analyzer)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)
 

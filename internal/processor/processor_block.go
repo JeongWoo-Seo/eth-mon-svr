@@ -17,7 +17,7 @@ import (
 
 var minedHashPool = sync.Pool{
 	New: func() interface{} {
-		// 초기 캡시티는 프로젝트의 평균 블록당 트랙잭션 수(예: 200~300개)로 잡아두면 좋습니다.
+		// 초기 캡시티는 프로젝트의 평균 블록당 트랙잭션 수
 		return make(map[string]struct{}, 256)
 	},
 }
@@ -141,7 +141,7 @@ func (p *Process) UpdateBlockInfoForAnalysis(currentBlockNumber uint64, baseFee 
 	p.gasanalyzer.UpdateAnalBlockTxPredictionGasResult(blockResult)
 }
 
-func (p *Process) UpdateBlockInfoForAnalysisForHistogram(currentBlockNumber uint64, baseFee *big.Int, gasUsed, gasLimit uint64) {
+func (p *Process) UpdateBlockInfoForAnalysisForHistogram(ctx context.Context, currentBlockNumber uint64, baseFee *big.Int, gasUsed, gasLimit uint64) {
 	nextBaseFee := p.gasanalyzer.CalculateNextBaseFee(baseFee, gasUsed, gasLimit)
 	blockData := p.blockstore.GetBlockData()
 
@@ -160,11 +160,15 @@ func (p *Process) UpdateBlockInfoForAnalysisForHistogram(currentBlockNumber uint
 		}
 	}
 
-	p.gasOracle.BlockHist.Reset()
-	p.gasOracle.BlockHist.Add(pool)
-	blockResult, err := p.gasOracle.BlockHist.PercentileGas(gasanalyzer.GasPredictionTargets)
+	p.gasanalyzer.BlockHist.Reset()
+	p.gasanalyzer.BlockHist.Add(pool)
+	blockResult, err := p.gasanalyzer.BlockHist.PercentileGas(gasanalyzer.GasPredictionTargets)
 	if err != nil {
-
+		logger.Error(ctx, "Failed to percentile histogram block gas result",
+			err,
+			slog.String("system", "percentile"),
+		)
+		return
 	}
 
 	// 향후 합칠 예정
@@ -174,7 +178,8 @@ func (p *Process) UpdateBlockInfoForAnalysisForHistogram(currentBlockNumber uint
 		gasUsed,
 		gasLimit,
 		nextBaseFee,
-		//blockResult,
 	)
+
+	//결과 저장 필요
 	p.gasanalyzer.UpdateOracleBlockTxPredictionGasResult(blockResult)
 }

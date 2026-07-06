@@ -39,7 +39,7 @@ func NewSubscriber(AlcUrl, InfUrl string, headerChan chan<- *types.Header, txHas
 func (s *Subscriber) SubscriberStart(ctx context.Context) {
 	go subscription(ctx, s.AlcWsUrl, "Header", "newHeads", headBufferSize, s.headerChan, nil)
 	go subscription(ctx, s.AlcWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
-	go subscription(ctx, s.InfWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
+	//go subscription(ctx, s.InfWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
 }
 
 func subscription[T any](

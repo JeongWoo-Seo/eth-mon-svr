@@ -50,33 +50,24 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 			if _, ok := preResult.analyzerBlock[t.Name]; ok {
 				anaBlock := int64(preResult.analyzerBlock[t.Name].PriorityFee)
 				anaPending := int64(preResult.analyzerPending[t.Name].PriorityFee)
-				oraBlock := int64(preResult.oracleBlock[t.Name].PriorityFee)
-				oraPending := int64(preResult.oraclePending[t.Name].PriorityFee)
 
-				blend := calculateFourWayBlend(t.Name, anaBlock, anaPending, oraBlock, oraPending)
+				blend := int64(float64(anaBlock)*0.3 + float64(anaPending)*0.7)
 				diff := blend - int64(actualTip)
 
-				// 1. 모든 가스비 지표를 콤마가 포함된 문자열로 변환
-				// diff의 경우 음수 기호(-)를 살리기 위해 int64 포맷팅을 유지합니다.
 				sAnaBlock := humanize.Comma(anaBlock)
 				sAnaPending := humanize.Comma(anaPending)
-				sOraBlock := humanize.Comma(oraBlock)
-				sOraPending := humanize.Comma(oraPending)
 				sBlend := humanize.Comma(blend)
 				sActual := humanize.Comma(int64(actualTip))
 				sDiff := humanize.Comma(diff)
 				if diff > 0 {
-					sDiff = "+" + sDiff // 양수일 때 + 기호 추가로 시인성 확보
+					sDiff = "+" + sDiff // 양수일 때 +
 				}
 
-				// 2. 포맷터를 %d에서 %s(문자열)로 변경하여 출력
 				fmt.Printf(
-					"%-10s | %-14s | %-14s | %-14s | %-14s | %-14s | %-14s | %-12s\n",
+					"%-10s | %-14s | %-14s | %-14s | %-14s | %-12s\n",
 					t.Name,
 					sAnaBlock,
 					sAnaPending,
-					sOraBlock,
-					sOraPending,
 					sBlend,
 					sActual,
 					sDiff,
@@ -93,10 +84,6 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 }
 
 func calculateFourWayBlend(levelName string, anaBlock, anaPending, oraBlock, oraPending int64) int64 {
-	// 예외 처리: 데이터가 비정상적일 때의 최소한의 방어선
-	if anaPending <= 0 {
-		return (anaBlock + oraBlock) / 2
-	}
 
 	maxVal := math.Max(float64(anaPending), float64(anaBlock))
 	minVal := math.Min(float64(anaPending), float64(anaBlock))
