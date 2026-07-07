@@ -31,6 +31,26 @@ func (a *Analyzer) EffectiveTip(feeCap, tipCap, baseFee *big.Int) (uint64, bool)
 	return result.Uint64(), true
 }
 
+func (a *Analyzer) EffectiveTipFromReceipt(effectiveGasPrice, baseFee *big.Int) (uint64, bool) {
+	if effectiveGasPrice == nil || baseFee == nil {
+		return 0, false
+	}
+
+	// EffectiveTip = EffectiveGasPrice - BaseFee
+	tip := new(big.Int).Sub(effectiveGasPrice, baseFee)
+
+	// 음수 처리 (혹시 모를 예외 상황 방지)
+	if tip.Sign() <= 0 {
+		return 0, false
+	}
+
+	if !tip.IsUint64() {
+		return 0, false
+	}
+
+	return tip.Uint64(), true
+}
+
 func (a *Analyzer) CalculateNextBaseFee(baseFee *big.Int, gasUsed, gasLimit uint64) *big.Int {
 	if baseFee == nil {
 		return big.NewInt(1_000_000_000) // 기본 1 gwei

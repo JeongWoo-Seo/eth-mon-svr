@@ -18,6 +18,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	getTxChunkSize = 8  // 한 번에 보낼 최대 RPC 요청 개수
+	getTxCuPerTx   = 11 // eth_getTransactionByHash 건당 11 CU 소모
+	feeHistoryCu   = 15
+	blockByHashCu  = 21
+)
+
 type Process struct {
 	pendingPool  *mempool.PendingMemPool
 	blockstore   *blockstore.Store
@@ -32,20 +39,6 @@ type Process struct {
 	fallbackUntil  time.Time
 }
 
-var batchElemPool = sync.Pool{
-	New: func() interface{} {
-		e := make([]rpc.BatchElem, 0, 100)
-		return &e
-	},
-}
-
-var txResultPool = sync.Pool{
-	New: func() interface{} {
-		r := make([]*types.Transaction, 0, 100)
-		return &r
-	},
-}
-
 func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, alcClient *ethclient.Client, infClient *ethclient.Client,
 	gasanalyzer *gasanalyzer.Analyzer) *Process {
 	return &Process{
@@ -55,7 +48,7 @@ func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Stor
 		infEthClient: infClient,
 		gasanalyzer:  gasanalyzer,
 
-		limiter: rate.NewLimiter(rate.Limit(200), 300),
+		limiter: rate.NewLimiter(rate.Limit(400), 500),
 
 		isFallbackMode: false,
 		fallbackUntil:  time.Now(),
@@ -97,98 +90,102 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 		return
 	}
 
-	ePtr := batchElemPool.Get().(*[]rpc.BatchElem)
-	rPtr := txResultPool.Get().(*[]*types.Transaction)
-	elems := (*ePtr)[:0]
-	results := (*rPtr)[:0]
+	ctx := context.Background()
 
-	if cap(elems) < len(hashes) {
-		elems = make([]rpc.BatchElem, len(hashes))
-		results = make([]*types.Transaction, len(hashes))
-	} else {
-		elems = elems[:len(hashes)]
-		results = results[:len(hashes)]
-	}
+	for i := 0; i < len(hashes); i += getTxChunkSize {
+		end := i + getTxChunkSize
+		if end > len(hashes) {
+			end = len(hashes)
+		}
 
-	for i, hash := range hashes {
-		results[i] = nil // 이전 결과 초기화
-		elems[i] = rpc.BatchElem{
-			Method: "eth_getTransactionByHash",
-			Args:   []interface{}{hash},
-			Result: &results[i],
+		chunkHashes := hashes[i:end]
+		chunkSize := len(chunkHashes)
+		chunkElems := make([]rpc.BatchElem, chunkSize)
+		chunkResults := make([]*types.Transaction, chunkSize)
+
+		for j, hash := range chunkHashes {
+			chunkElems[j] = rpc.BatchElem{
+				Method: "eth_getTransactionByHash",
+				Args:   []interface{}{hash},
+				Result: &chunkResults[j],
+			}
+		}
+
+		totalCu := chunkSize * getTxCuPerTx
+		if err := p.limiter.WaitN(ctx, totalCu); err != nil {
+			logger.Error(ctx, "Rate limiter error in GetTxInfo",
+				err,
+				slog.Int("requested_cu", totalCu))
+			break
+		}
+
+		// 알케미 요청
+		err := p.alcEthClient.Client().BatchCallContext(ctx, chunkElems)
+		if err != nil {
+			logger.Error(ctx, "Failed to get tx info chunk",
+				err,
+				slog.String("system", "ethereum"),
+				slog.Int("chunk_start", i),
+				slog.Int("chunk_size", chunkSize))
+			continue
+		}
+
+		// 개별 에러 검증 및 정상 결과 수집
+		validResults := make([]*types.Transaction, 0, chunkSize)
+		for j := 0; j < chunkSize; j++ {
+			if chunkElems[j].Error != nil {
+				logger.Warn(ctx, "Failed to fetch individual tx",
+					slog.String("err", chunkElems[j].Error.Error()),
+					slog.String("hash", chunkHashes[j].Hex()))
+				continue
+			}
+			if chunkResults[j] != nil {
+				validResults = append(validResults, chunkResults[j])
+			}
+		}
+
+		if len(validResults) > 0 {
+			report.IncTxFetched(uint64(len(validResults)))
+			p.pendingPool.PushBatch(validResults)
 		}
 	}
-
-	ctx := context.Background()
-	err := p.alcEthClient.Client().BatchCallContext(ctx, elems)
-	if err != nil {
-		logger.Error(ctx, "Failed to get tx info",
-			err,
-			slog.String("system", "ethereum"),
-			slog.Int("tx size", len(elems)))
-		return
-	}
-
-	report.IncTxFetched(uint64(len(results)))
-	p.pendingPool.PushBatch(results)
-
-	for i := range results {
-		results[i] = nil
-	}
-
-	*ePtr = elems
-	*rPtr = results
-	batchElemPool.Put(ePtr)
-	txResultPool.Put(rPtr)
 }
 
 func (p *Process) ProcessBlock(header *types.Header) {
 	ctx := context.Background()
 
-	//이전 블록 결과 비교
-	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
-
-	block, err := p.alcEthClient.BlockByHash(ctx, header.Hash())
-	if err != nil {
-		logger.Error(ctx, "Failed to fetch block by hash",
-			err,
-			slog.String("system", "ethereum"),
-			slog.String("block_hash", header.Hash().Hex()))
-
-		// pending 데이터 삭제 - 오류 발생시 mempool에 tx가 계속 남아 있는 현상이 발생하여 오류발생시 모든 tx를 삭제
-		p.ClearMempool(ctx)
-		return
-	}
+	// 이전 블록 결과 분석
+	p.CompareFeeHistory(ctx)
 
 	logger.Info(ctx, "Create new block",
 		slog.String("system", "ethereum"),
 		slog.String("block_hash", header.Hash().Hex()))
 
-	txs := block.Transactions()
-	if len(txs) == 0 {
-		return
-	}
-
 	// tx 영수증 가져오기
-	receipt, err := p.fetchReceiptsBatch(ctx, txs)
+	receipts, err := p.fetchBlockReceipts(ctx, header.Hash().Hex())
 	if err != nil {
 		logger.Error(ctx, "Failed to fetch receipts batch",
 			err,
 			slog.String("system", "ethereum"),
+			slog.String("block_hash", header.Hash().Hex()),
 		)
-		// 영수증은 실패했어도 블록에 포함된건 확실하므로 멤풀은 정리
-		p.ClearMempoolToTx(ctx, block, txs)
+
+		p.ClearMempool(ctx)
+		return
+	}
+
+	if len(receipts) == 0 {
 		return
 	}
 
 	// 블록 데이터 가공
-	blockData := p.CalculateBlockTxTip(block, txs, receipt)
+	blockData := p.CalculateBlockTxTip(header, receipts)
 
 	//데이터 저장
 	p.blockstore.AddBlock(blockData)
-	p.ClearMempoolToTx(ctx, block, txs)
+	p.ClearMempoolToTx(ctx, header, receipts)
 
 	// 분석을 위한 블록 및 tx 정보 업데이트 //각 block에 대한 결과값 계산
-	p.UpdateBlockInfoForAnalysis(block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
+	p.UpdateBlockInfoForAnalysis(header)
 	//p.UpdateBlockInfoForAnalysisForHistogram(ctx, block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
 }

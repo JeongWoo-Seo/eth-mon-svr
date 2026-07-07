@@ -25,7 +25,7 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 	}
 
 	per := make([]float64, 0, len(GasPredictionTargets))
-
+	//0.90 -> 90 으로 변환하기위한 과정
 	for _, t := range GasPredictionTargets {
 		per = append(per, t.Ratio*100)
 	}
