@@ -3,8 +3,6 @@ package processor
 import (
 	"context"
 	"log/slog"
-	"math"
-	"math/big"
 	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
@@ -219,47 +217,4 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 		nextBaseFee,
 	)
 	p.gasanalyzer.UpdateAnalBlockTxPredictionGasResult(blockResult)
-}
-
-func (p *Process) UpdateBlockInfoForAnalysisForHistogram(ctx context.Context, currentBlockNumber uint64, baseFee *big.Int, gasUsed, gasLimit uint64) {
-	nextBaseFee := p.gasanalyzer.CalculateNextBaseFee(baseFee, gasUsed, gasLimit)
-	blockData := p.blockstore.GetBlockData()
-
-	if len(blockData) == 0 {
-		return
-	}
-	pool := make([]gasanalyzer.GasTip, 0, len(blockData)*200)
-
-	for _, b := range blockData {
-		for _, tx := range b.Txs {
-			adjustedGas := uint64(math.Round(math.Sqrt(float64(tx.GasUsed))))
-			pool = append(pool, gasanalyzer.GasTip{
-				Tip: tx.Tip,
-				Gas: adjustedGas,
-			})
-		}
-	}
-
-	p.gasanalyzer.BlockHist.Reset()
-	p.gasanalyzer.BlockHist.Add(pool)
-	blockResult, err := p.gasanalyzer.BlockHist.PercentileGas(gasanalyzer.GasPredictionTargets)
-	if err != nil {
-		logger.Error(ctx, "Failed to percentile histogram block gas result",
-			err,
-			slog.String("system", "percentile"),
-		)
-		return
-	}
-
-	// 향후 합칠 예정
-	p.gasanalyzer.UpdateLatestBlockData(
-		currentBlockNumber,
-		baseFee,
-		gasUsed,
-		gasLimit,
-		nextBaseFee,
-	)
-
-	//결과 저장 필요
-	p.gasanalyzer.UpdateOracleBlockTxPredictionGasResult(blockResult)
 }

@@ -87,8 +87,7 @@ type GasLevel struct {
 type GasPrediction struct {
 	NextBlockNumber uint64 `json:"blockNumber"`
 	NextBaseFee     uint64 `json:"nextBaseFee"`
-	oracleBlock     map[string]GasLevel
-	oraclePending   map[string]GasLevel
+	predictResult   map[string]GasLevel
 	analyzerBlock   map[string]GasLevel
 	analyzerPending map[string]GasLevel
 	UpdatedAt       time.Time `json:"updatedAt"`

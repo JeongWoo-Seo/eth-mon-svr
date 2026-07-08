@@ -187,5 +187,4 @@ func (p *Process) ProcessBlock(header *types.Header) {
 
 	// 분석을 위한 블록 및 tx 정보 업데이트 //각 block에 대한 결과값 계산
 	p.UpdateBlockInfoForAnalysis(header)
-	//p.UpdateBlockInfoForAnalysisForHistogram(ctx, block.NumberU64(), block.BaseFee(), block.GasUsed(), block.GasLimit())
 }

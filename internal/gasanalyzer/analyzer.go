@@ -2,6 +2,7 @@ package gasanalyzer
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math"
 	"math/big"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
+	"github.com/dustin/go-humanize"
 )
 
 const (
@@ -227,6 +229,43 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int) {
 		a.latestResult.NextBaseFee = nextBaseFee.Uint64()
 	}
 
+	if a.latestResult.predictResult == nil {
+		a.latestResult.predictResult = make(map[string]GasLevel)
+	}
+
+	for _, t := range GasPredictionTargets {
+		if _, ok := a.latestResult.analyzerBlock[t.Name]; ok {
+			anaBlock := uint64(a.latestResult.analyzerBlock[t.Name].PriorityFee)
+			anaPending := uint64(a.latestResult.analyzerPending[t.Name].PriorityFee)
+
+			// 가중치 결합 계산
+			blend := uint64(float64(anaBlock)*0.3 + float64(anaPending)*0.7)
+			if blend < 0 {
+				blend = 0 // 음수 방지 예외 처리
+			}
+
+			a.latestResult.predictResult[t.Name] = GasLevel{
+				PriorityFee: blend,
+				MaxFee:      a.latestResult.NextBaseFee + blend,
+			}
+
+			sAnaBlock := humanize.Comma(int64(anaBlock))
+			sAnaPending := humanize.Comma(int64(anaPending))
+			sBlend := humanize.Comma(int64(blend))
+
+			fmt.Printf(
+				"%-10s | %-14s | %-14s | %-14s \n",
+				t.Name,
+				sAnaBlock,
+				sAnaPending,
+				sBlend,
+			)
+
+		} else {
+			fmt.Printf("%-10s | 데이터 없음\n", t.Name)
+		}
+	}
+
 	a.latestResult.UpdatedAt = time.Now()
 }
 
@@ -291,44 +330,6 @@ func (a *Analyzer) UpdateAnalPendingTxPredictionGasResult(result map[string]uint
 
 	for level, fee := range result {
 		a.latestResult.analyzerPending[level] = GasLevel{
-			PriorityFee: fee,
-			MaxFee:      baseFee + fee,
-		}
-	}
-}
-
-func (a *Analyzer) UpdateOracleBlockTxPredictionGasResult(result map[string]uint64) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.latestResult.oracleBlock = make(map[string]GasLevel, len(result))
-
-	var baseFee uint64
-	if a.latestBlockData.NextBaseFee != nil {
-		baseFee = a.latestBlockData.NextBaseFee.Uint64()
-	}
-
-	for level, fee := range result {
-		a.latestResult.oracleBlock[level] = GasLevel{
-			PriorityFee: fee,
-			MaxFee:      baseFee + fee,
-		}
-	}
-}
-
-func (a *Analyzer) UpdateOraclePendingTxPredictionGasResult(result map[string]uint64) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.latestResult.oraclePending = make(map[string]GasLevel, len(result))
-
-	var baseFee uint64
-	if a.latestBlockData.NextBaseFee != nil {
-		baseFee = a.latestBlockData.NextBaseFee.Uint64()
-	}
-
-	for level, fee := range result {
-		a.latestResult.oraclePending[level] = GasLevel{
 			PriorityFee: fee,
 			MaxFee:      baseFee + fee,
 		}
