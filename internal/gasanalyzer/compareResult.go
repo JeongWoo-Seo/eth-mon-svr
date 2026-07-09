@@ -50,7 +50,7 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 				anaBlock := int64(preResult.analyzerBlock[t.Name].PriorityFee)
 				anaPending := int64(preResult.analyzerPending[t.Name].PriorityFee)
 
-				blend := int64(float64(anaBlock)*0.3 + float64(anaPending)*0.7)
+				blend := int64(preResult.predictResult[t.Name].PriorityFee)
 				diff := blend - int64(actualTip)
 
 				sAnaBlock := humanize.Comma(anaBlock)

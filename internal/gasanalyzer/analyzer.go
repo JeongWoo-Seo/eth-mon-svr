@@ -12,7 +12,6 @@ import (
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
-	"github.com/dustin/go-humanize"
 )
 
 const (
@@ -66,6 +65,7 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	a.mu.RLock()
 	nextBlockNum := a.latestBlockData.BlockNumber + 1
 	nextBaseFee := new(big.Int).Set(a.latestBlockData.NextBaseFee)
+	currentBaseFee := new(big.Int).Set(a.latestBlockData.BaseFee)
 	a.mu.RUnlock()
 
 	//pending tx weight 계산
@@ -77,7 +77,7 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	//결과 업데이트
 	a.UpdateAnalPendingTxPredictionGasResult(peingResult)
 
-	a.UpdateResult(nextBlockNum, nextBaseFee)
+	a.UpdateResult(nextBlockNum, currentBaseFee, nextBaseFee)
 
 	logger.Info(context.Background(), "Gas analysis complete",
 		slog.String("system", "analysis"),
@@ -220,7 +220,7 @@ func defaultValue() map[string]uint64 {
 	}
 }
 
-func (a *Analyzer) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int) {
+func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee *big.Int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -228,38 +228,47 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int) {
 	if nextBaseFee != nil {
 		a.latestResult.NextBaseFee = nextBaseFee.Uint64()
 	}
-
 	if a.latestResult.predictResult == nil {
 		a.latestResult.predictResult = make(map[string]GasLevel)
 	}
 
+	// BaseFee 변화 추세를 기반 가중치
+	const sensitivity = 1.2
+	multiplier := 1.0
+
+	if currentBaseFee != nil && nextBaseFee != nil && currentBaseFee.Sign() > 0 {
+		current := currentBaseFee.Int64()
+		next := nextBaseFee.Int64()
+		rate := float64(next-current) / float64(current)
+		multiplier = 1.0 + (rate * sensitivity)
+	}
+
+	// 각 가스 등급별 예측 타겟 연산 및 보정
 	for _, t := range GasPredictionTargets {
 		if _, ok := a.latestResult.analyzerBlock[t.Name]; ok {
 			anaBlock := uint64(a.latestResult.analyzerBlock[t.Name].PriorityFee)
 			anaPending := uint64(a.latestResult.analyzerPending[t.Name].PriorityFee)
 
-			// 가중치 결합 계산
-			blend := uint64(float64(anaBlock)*0.3 + float64(anaPending)*0.7)
-			if blend < 0 {
-				blend = 0 // 음수 방지 예외 처리
+			blend := float64(anaBlock)*0.2 + float64(anaPending)*0.8
+			priorityFee := uint64(blend * multiplier)
+
+			// 3-3. 하한선 및 음수 방지 예외 처리 (특히 low 등급 방어)
+			var minLimit uint64 = 1440000 // 체인별 최저 PriorityFee 하한선 설정
+			if t.Name == "low" && priorityFee < minLimit {
+				priorityFee = minLimit
+			} else if priorityFee < 0 {
+				priorityFee = 0
 			}
 
 			a.latestResult.predictResult[t.Name] = GasLevel{
-				PriorityFee: blend,
-				MaxFee:      a.latestResult.NextBaseFee + blend,
+				PriorityFee: priorityFee,
+				MaxFee:      a.latestResult.NextBaseFee + priorityFee,
 			}
 
-			sAnaBlock := humanize.Comma(int64(anaBlock))
-			sAnaPending := humanize.Comma(int64(anaPending))
-			sBlend := humanize.Comma(int64(blend))
-
-			fmt.Printf(
-				"%-10s | %-14s | %-14s | %-14s \n",
-				t.Name,
-				sAnaBlock,
-				sAnaPending,
-				sBlend,
-			)
+			// sAnaBlock := humanize.Comma(int64(anaBlock))
+			// sAnaPending := humanize.Comma(int64(anaPending))
+			// sFinalFee := humanize.Comma(int64(priorityFee))
+			// fmt.Printf("%-10s | %-14s | %-14s \n", t.Name, sAnaBlock, sAnaPending, sFinalFee, )
 
 		} else {
 			fmt.Printf("%-10s | 데이터 없음\n", t.Name)
