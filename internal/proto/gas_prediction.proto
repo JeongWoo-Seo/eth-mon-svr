@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package gas_prediction;
+
+option go_package = "github.com/JeongWoo-Seo/eth-mon-svr/pb";
+
+import "google/protobuf/timestamp.proto";
+
+message GasLevel {
+    uint64 priority_fee = 1;
+    uint64 max_fee = 2;
+}
+
+message GasPredictionRequest {
+    uint64 next_block_number = 1;
+    uint64 next_base_fee = 2;
+    map<string, GasLevel> predict_result = 3;
+    google.protobuf.Timestamp updated_at = 4;
+}
+
+message GasPredictionResponse {
+    bool Success = 1;
+    string message = 2;
+}

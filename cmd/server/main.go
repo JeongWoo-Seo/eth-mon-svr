@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -12,6 +13,7 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/eth"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/grpcClient"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/ingestion"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
@@ -66,6 +68,15 @@ func main() {
 	)
 
 	//////////////////////////
+	// connect grpc
+	//////////////////////////
+	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(cfg.WebServerAddr)
+	if err != nil {
+		log.Fatalf("gRPC 클라이언트 초기화 실패: %v", err)
+	}
+	defer cleanup()
+
+	//////////////////////////
 	// set pool, processor, mempool
 	//////////////////////////
 	pendingPool := mempool.NewPendingMemPool(400, 20*time.Second)
@@ -78,7 +89,7 @@ func main() {
 	}
 	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
-	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool)
+	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, grpcClient)
 	proc := processor.NewProcess(pendingPool, blockstore, alcEthClient.EthClient, infEthClient.EthClient, analyzer)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)

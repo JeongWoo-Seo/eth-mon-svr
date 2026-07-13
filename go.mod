@@ -3,9 +3,13 @@ module github.com/JeongWoo-Seo/eth-mon-svr
 go 1.26.1
 
 require (
+	github.com/dustin/go-humanize v1.0.1
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/spf13/viper v1.21.0
+	golang.org/x/time v0.15.0
+	google.golang.org/grpc v1.77.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -18,7 +22,6 @@ require (
 	github.com/crate-crypto/go-eth-kzg v1.5.0 // indirect
 	github.com/deckarep/golang-set/v2 v2.6.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.6 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -43,8 +46,9 @@ require (
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect
 )

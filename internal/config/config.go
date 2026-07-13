@@ -12,6 +12,7 @@ type Config struct {
 	Service          string  `mapstructure:"SERVICE"`
 	Env              string  `mapstructure:"ENV"`
 	ServerPort       string  `mapstructure:"SERVER_PORT"`
+	WebServerAddr    string  `mapstructure:"WEB_SERVER_ADDR"`
 	EthAlcRpcHttpUrl string  `mapstructure:"ETH_ALC_RPC_HTTP_URL"`
 	EthAlcRpcWsUrl   string  `mapstructure:"ETH_ALC_RPC_WS_URL"`
 	EthInfRpcHttpUrl string  `mapstructure:"ETH_INF_RPC_HTTP_URL"`

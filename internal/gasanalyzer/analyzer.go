@@ -12,6 +12,8 @@ import (
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -25,13 +27,13 @@ type Analyzer struct {
 	latestBlockData BlockAnalysisData
 
 	pendingPool *mempool.PendingMemPool
-	BlockHist   *Histogram
+	grpcClient  pb.GasPredictionServiceClient
 }
 
-func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool) *Analyzer {
+func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, grpcClient pb.GasPredictionServiceClient) *Analyzer {
 	a := &Analyzer{
 		pendingPool: pendingPool,
-		BlockHist:   NewHistogram(),
+		grpcClient:  grpcClient,
 	}
 
 	for age := 0; age < MaxAge; age++ {
@@ -72,10 +74,10 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	pendingData := a.collectPendingTx(a.latestBlockData.NextBaseFee, a.latestBlockData.GasLimit)
 
 	//가중 백분위 계산
-	peingResult := a.WeightedPercentiles(pendingData)
+	pendingResult := a.WeightedPercentiles(pendingData)
 
 	//결과 업데이트
-	a.UpdateAnalPendingTxPredictionGasResult(peingResult)
+	a.UpdateAnalPendingTxPredictionGasResult(pendingResult)
 
 	a.UpdateResult(nextBlockNum, currentBaseFee, nextBaseFee)
 
@@ -169,7 +171,7 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 
 		group, exist := PredictionGroups[groupKey]
 
-		// 그룹 설정이 없거나 비어있다면, 기존처럼 단일 분위수(Fallback) 추출
+		// 그룹 설정이 없거나 비어있다면, 단일 값으로
 		if !exist || len(group) == 0 {
 			// 0.40부터 0.05 단위이므로 안전하게 반올림하여 인덱스 계산
 			idx := int(((target.Ratio - 0.40) / 0.05) + 0.5)
@@ -184,7 +186,7 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 		var sumTips float64
 		var sumWeights float64
 		for _, wp := range group {
-			// 인덱스 바운드 체크 추가 (안전성 보장)
+			// 인덱스 바운드 체크
 			if wp.Index >= 0 && wp.Index < len(analysisResults) {
 				sumTips += analysisResults[wp.Index] * wp.Weight
 				sumWeights += wp.Weight
@@ -276,6 +278,46 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee
 	}
 
 	a.latestResult.UpdatedAt = time.Now()
+}
+
+func (a *Analyzer) SendGasPrediction() {
+	a.mu.Lock()
+	result := a.latestResult
+	a.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	gasResult := make(map[string]*pb.GasLevel, len(result.predictResult))
+	for k, v := range result.predictResult {
+		gasResult[k] = &pb.GasLevel{
+			PriorityFee: v.PriorityFee,
+			MaxFee:      v.MaxFee,
+		}
+	}
+
+	req := &pb.GasPredictionRequest{
+		NextBlockNumber: result.NextBlockNumber,
+		NextBaseFee:     result.NextBaseFee,
+		PredictResult:   gasResult,
+		UpdatedAt:       timestamppb.New(result.UpdatedAt),
+	}
+
+	res, err := a.grpcClient.SendGasPrediction(ctx, req)
+	if err != nil {
+		logger.Error(context.Background(), "failed to send gRPC prediction result",
+			err,
+			slog.String("system", "grpc"),
+		)
+		return
+	}
+
+	if !res.Success {
+		logger.Warn(context.Background(), "web server reject gas result",
+			slog.String("system", "web server"),
+			slog.String("message", res.Message),
+		)
+	}
 }
 
 func (a *Analyzer) GetPrediction() GasPrediction {
