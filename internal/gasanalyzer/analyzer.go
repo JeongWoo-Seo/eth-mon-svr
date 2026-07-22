@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/grpcClient"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
@@ -27,10 +28,10 @@ type Analyzer struct {
 	latestBlockData BlockAnalysisData
 
 	pendingPool *mempool.PendingMemPool
-	grpcClient  pb.GasPredictionServiceClient
+	grpcClient  *grpcClient.GasPredictionClient
 }
 
-func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, grpcClient pb.GasPredictionServiceClient) *Analyzer {
+func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, grpcClient *grpcClient.GasPredictionClient) *Analyzer {
 	a := &Analyzer{
 		pendingPool: pendingPool,
 		grpcClient:  grpcClient,
@@ -79,7 +80,12 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	//결과 업데이트
 	a.UpdateAnalPendingTxPredictionGasResult(pendingResult)
 
-	a.UpdateResult(nextBlockNum, currentBaseFee, nextBaseFee)
+	predictionResult := a.UpdateResult(nextBlockNum, currentBaseFee, nextBaseFee)
+
+	// 결과 web 서버로 전달
+	if predictionResult != nil {
+		a.sendResultToGRPC(predictionResult)
+	}
 
 	logger.Info(context.Background(), "Gas analysis complete",
 		slog.String("system", "analysis"),
@@ -222,7 +228,7 @@ func defaultValue() map[string]uint64 {
 	}
 }
 
-func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee *big.Int) {
+func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee *big.Int) *GasPrediction {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -278,19 +284,16 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee
 	}
 
 	a.latestResult.UpdatedAt = time.Now()
+
+	result := a.latestResult
+	return &result
 }
 
-func (a *Analyzer) SendGasPrediction() {
-	a.mu.Lock()
-	result := a.latestResult
-	a.mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	gasResult := make(map[string]*pb.GasLevel, len(result.predictResult))
+func (a *Analyzer) sendResultToGRPC(result *GasPrediction) {
+	//pb 형태로 변환
+	pbPredictResult := make(map[string]*pb.GasLevel, len(result.predictResult))
 	for k, v := range result.predictResult {
-		gasResult[k] = &pb.GasLevel{
+		pbPredictResult[k] = &pb.GasLevel{
 			PriorityFee: v.PriorityFee,
 			MaxFee:      v.MaxFee,
 		}
@@ -299,25 +302,11 @@ func (a *Analyzer) SendGasPrediction() {
 	req := &pb.GasPredictionRequest{
 		NextBlockNumber: result.NextBlockNumber,
 		NextBaseFee:     result.NextBaseFee,
-		PredictResult:   gasResult,
+		PredictResult:   pbPredictResult,
 		UpdatedAt:       timestamppb.New(result.UpdatedAt),
 	}
 
-	res, err := a.grpcClient.SendGasPrediction(ctx, req)
-	if err != nil {
-		logger.Error(context.Background(), "failed to send gRPC prediction result",
-			err,
-			slog.String("system", "grpc"),
-		)
-		return
-	}
-
-	if !res.Success {
-		logger.Warn(context.Background(), "web server reject gas result",
-			slog.String("system", "web server"),
-			slog.String("message", res.Message),
-		)
-	}
+	a.grpcClient.ResultSend(req)
 }
 
 func (a *Analyzer) GetPrediction() GasPrediction {

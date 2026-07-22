@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package gas_prediction;
 
-option go_package  = "github.com/JeongWoo-Seo/eth-mon-svr/pb";
+option go_package  = "github.com/JeongWoo-Seo/eth-mon-svr/internal/pb";
 
 import "gas_prediction.proto";
 
 service GasPredictionService {
-    rpc sendGasPrediction(GasPredictionRequest)returns(GasPredictionResponse);
+    rpc UploadGasPredictions(stream GasPredictionRequest) returns (GasPredictionResponse);
 }

@@ -70,7 +70,7 @@ func main() {
 	//////////////////////////
 	// connect grpc
 	//////////////////////////
-	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(cfg.WebServerAddr)
+	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(ctx, cfg.GrpcServerAddr)
 	if err != nil {
 		log.Fatalf("gRPC 클라이언트 초기화 실패: %v", err)
 	}
@@ -110,7 +110,7 @@ func main() {
 	//////////////////////////
 	logger.Info(ctx, "Monitoring server started.")
 	analyzer.Start(ctx)
-	//gasOracle.Start(ctx)
+
 	//////////////////////////
 	// server shutdown
 	//////////////////////////

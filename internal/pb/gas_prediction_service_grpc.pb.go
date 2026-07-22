@@ -19,14 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	GasPredictionService_SendGasPrediction_FullMethodName = "/gas_prediction.GasPredictionService/sendGasPrediction"
+	GasPredictionService_UploadGasPredictions_FullMethodName = "/gas_prediction.GasPredictionService/UploadGasPredictions"
 )
 
 // GasPredictionServiceClient is the client API for GasPredictionService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GasPredictionServiceClient interface {
-	SendGasPrediction(ctx context.Context, in *GasPredictionRequest, opts ...grpc.CallOption) (*GasPredictionResponse, error)
+	UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse], error)
 }
 
 type gasPredictionServiceClient struct {
@@ -37,21 +37,24 @@ func NewGasPredictionServiceClient(cc grpc.ClientConnInterface) GasPredictionSer
 	return &gasPredictionServiceClient{cc}
 }
 
-func (c *gasPredictionServiceClient) SendGasPrediction(ctx context.Context, in *GasPredictionRequest, opts ...grpc.CallOption) (*GasPredictionResponse, error) {
+func (c *gasPredictionServiceClient) UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GasPredictionResponse)
-	err := c.cc.Invoke(ctx, GasPredictionService_SendGasPrediction_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &GasPredictionService_ServiceDesc.Streams[0], GasPredictionService_UploadGasPredictions_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[GasPredictionRequest, GasPredictionResponse]{ClientStream: stream}
+	return x, nil
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type GasPredictionService_UploadGasPredictionsClient = grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse]
 
 // GasPredictionServiceServer is the server API for GasPredictionService service.
 // All implementations must embed UnimplementedGasPredictionServiceServer
 // for forward compatibility.
 type GasPredictionServiceServer interface {
-	SendGasPrediction(context.Context, *GasPredictionRequest) (*GasPredictionResponse, error)
+	UploadGasPredictions(grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]) error
 	mustEmbedUnimplementedGasPredictionServiceServer()
 }
 
@@ -62,8 +65,8 @@ type GasPredictionServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedGasPredictionServiceServer struct{}
 
-func (UnimplementedGasPredictionServiceServer) SendGasPrediction(context.Context, *GasPredictionRequest) (*GasPredictionResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SendGasPrediction not implemented")
+func (UnimplementedGasPredictionServiceServer) UploadGasPredictions(grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]) error {
+	return status.Error(codes.Unimplemented, "method UploadGasPredictions not implemented")
 }
 func (UnimplementedGasPredictionServiceServer) mustEmbedUnimplementedGasPredictionServiceServer() {}
 func (UnimplementedGasPredictionServiceServer) testEmbeddedByValue()                              {}
@@ -86,23 +89,12 @@ func RegisterGasPredictionServiceServer(s grpc.ServiceRegistrar, srv GasPredicti
 	s.RegisterService(&GasPredictionService_ServiceDesc, srv)
 }
 
-func _GasPredictionService_SendGasPrediction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GasPredictionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GasPredictionServiceServer).SendGasPrediction(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: GasPredictionService_SendGasPrediction_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GasPredictionServiceServer).SendGasPrediction(ctx, req.(*GasPredictionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+func _GasPredictionService_UploadGasPredictions_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(GasPredictionServiceServer).UploadGasPredictions(&grpc.GenericServerStream[GasPredictionRequest, GasPredictionResponse]{ServerStream: stream})
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type GasPredictionService_UploadGasPredictionsServer = grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]
 
 // GasPredictionService_ServiceDesc is the grpc.ServiceDesc for GasPredictionService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -110,12 +102,13 @@ func _GasPredictionService_SendGasPrediction_Handler(srv interface{}, ctx contex
 var GasPredictionService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "gas_prediction.GasPredictionService",
 	HandlerType: (*GasPredictionServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "sendGasPrediction",
-			Handler:    _GasPredictionService_SendGasPrediction_Handler,
+			StreamName:    "UploadGasPredictions",
+			Handler:       _GasPredictionService_UploadGasPredictions_Handler,
+			ClientStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "gas_prediction_service.proto",
 }

@@ -213,7 +213,7 @@ const file_gas_prediction_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x18.gas_prediction.GasLevelR\x05value:\x028\x01\"K\n" +
 	"\x15GasPredictionResponse\x12\x18\n" +
 	"\aSuccess\x18\x01 \x01(\bR\aSuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessageB(Z&github.com/JeongWoo-Seo/eth-mon-svr/pbb\x06proto3"
+	"\amessage\x18\x02 \x01(\tR\amessageB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
 
 var (
 	file_gas_prediction_proto_rawDescOnce sync.Once

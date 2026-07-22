@@ -24,17 +24,17 @@ var File_gas_prediction_service_proto protoreflect.FileDescriptor
 
 const file_gas_prediction_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgas_prediction_service.proto\x12\x0egas_prediction\x1a\x14gas_prediction.proto2x\n" +
-	"\x14GasPredictionService\x12`\n" +
-	"\x11sendGasPrediction\x12$.gas_prediction.GasPredictionRequest\x1a%.gas_prediction.GasPredictionResponseB(Z&github.com/JeongWoo-Seo/eth-mon-svr/pbb\x06proto3"
+	"\x1cgas_prediction_service.proto\x12\x0egas_prediction\x1a\x14gas_prediction.proto2}\n" +
+	"\x14GasPredictionService\x12e\n" +
+	"\x14UploadGasPredictions\x12$.gas_prediction.GasPredictionRequest\x1a%.gas_prediction.GasPredictionResponse(\x01B1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
 
 var file_gas_prediction_service_proto_goTypes = []any{
 	(*GasPredictionRequest)(nil),  // 0: gas_prediction.GasPredictionRequest
 	(*GasPredictionResponse)(nil), // 1: gas_prediction.GasPredictionResponse
 }
 var file_gas_prediction_service_proto_depIdxs = []int32{
-	0, // 0: gas_prediction.GasPredictionService.sendGasPrediction:input_type -> gas_prediction.GasPredictionRequest
-	1, // 1: gas_prediction.GasPredictionService.sendGasPrediction:output_type -> gas_prediction.GasPredictionResponse
+	0, // 0: gas_prediction.GasPredictionService.UploadGasPredictions:input_type -> gas_prediction.GasPredictionRequest
+	1, // 1: gas_prediction.GasPredictionService.UploadGasPredictions:output_type -> gas_prediction.GasPredictionResponse
 	1, // [1:2] is the sub-list for method output_type
 	0, // [0:1] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

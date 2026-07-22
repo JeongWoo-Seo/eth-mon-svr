@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package gas_prediction;
 
-option go_package = "github.com/JeongWoo-Seo/eth-mon-svr/pb";
+option go_package = "github.com/JeongWoo-Seo/eth-mon-svr/internal/pb";
 
 import "google/protobuf/timestamp.proto";
 
