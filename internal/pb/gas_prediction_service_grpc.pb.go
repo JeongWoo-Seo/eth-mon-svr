@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	GasPredictionService_UploadGasPredictions_FullMethodName = "/gas_prediction.GasPredictionService/UploadGasPredictions"
+	GasPredictionService_UploadGasPredictions_FullMethodName = "/gas_monitoring.GasPredictionService/UploadGasPredictions"
 )
 
 // GasPredictionServiceClient is the client API for GasPredictionService service.
@@ -100,7 +100,7 @@ type GasPredictionService_UploadGasPredictionsServer = grpc.ClientStreamingServe
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var GasPredictionService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gas_prediction.GasPredictionService",
+	ServiceName: "gas_monitoring.GasPredictionService",
 	HandlerType: (*GasPredictionServiceServer)(nil),
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{

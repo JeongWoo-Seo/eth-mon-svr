@@ -198,19 +198,19 @@ var File_gas_prediction_proto protoreflect.FileDescriptor
 
 const file_gas_prediction_proto_rawDesc = "" +
 	"\n" +
-	"\x14gas_prediction.proto\x12\x0egas_prediction\x1a\x1fgoogle/protobuf/timestamp.proto\"F\n" +
+	"\x14gas_prediction.proto\x12\x0egas_monitoring\x1a\x1fgoogle/protobuf/timestamp.proto\"F\n" +
 	"\bGasLevel\x12!\n" +
 	"\fpriority_fee\x18\x01 \x01(\x04R\vpriorityFee\x12\x17\n" +
 	"\amax_fee\x18\x02 \x01(\x04R\x06maxFee\"\xdd\x02\n" +
 	"\x14GasPredictionRequest\x12*\n" +
 	"\x11next_block_number\x18\x01 \x01(\x04R\x0fnextBlockNumber\x12\"\n" +
 	"\rnext_base_fee\x18\x02 \x01(\x04R\vnextBaseFee\x12^\n" +
-	"\x0epredict_result\x18\x03 \x03(\v27.gas_prediction.GasPredictionRequest.PredictResultEntryR\rpredictResult\x129\n" +
+	"\x0epredict_result\x18\x03 \x03(\v27.gas_monitoring.GasPredictionRequest.PredictResultEntryR\rpredictResult\x129\n" +
 	"\n" +
 	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1aZ\n" +
 	"\x12PredictResultEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12.\n" +
-	"\x05value\x18\x02 \x01(\v2\x18.gas_prediction.GasLevelR\x05value:\x028\x01\"K\n" +
+	"\x05value\x18\x02 \x01(\v2\x18.gas_monitoring.GasLevelR\x05value:\x028\x01\"K\n" +
 	"\x15GasPredictionResponse\x12\x18\n" +
 	"\aSuccess\x18\x01 \x01(\bR\aSuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessageB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
@@ -229,16 +229,16 @@ func file_gas_prediction_proto_rawDescGZIP() []byte {
 
 var file_gas_prediction_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_gas_prediction_proto_goTypes = []any{
-	(*GasLevel)(nil),              // 0: gas_prediction.GasLevel
-	(*GasPredictionRequest)(nil),  // 1: gas_prediction.GasPredictionRequest
-	(*GasPredictionResponse)(nil), // 2: gas_prediction.GasPredictionResponse
-	nil,                           // 3: gas_prediction.GasPredictionRequest.PredictResultEntry
+	(*GasLevel)(nil),              // 0: gas_monitoring.GasLevel
+	(*GasPredictionRequest)(nil),  // 1: gas_monitoring.GasPredictionRequest
+	(*GasPredictionResponse)(nil), // 2: gas_monitoring.GasPredictionResponse
+	nil,                           // 3: gas_monitoring.GasPredictionRequest.PredictResultEntry
 	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
 }
 var file_gas_prediction_proto_depIdxs = []int32{
-	3, // 0: gas_prediction.GasPredictionRequest.predict_result:type_name -> gas_prediction.GasPredictionRequest.PredictResultEntry
-	4, // 1: gas_prediction.GasPredictionRequest.updated_at:type_name -> google.protobuf.Timestamp
-	0, // 2: gas_prediction.GasPredictionRequest.PredictResultEntry.value:type_name -> gas_prediction.GasLevel
+	3, // 0: gas_monitoring.GasPredictionRequest.predict_result:type_name -> gas_monitoring.GasPredictionRequest.PredictResultEntry
+	4, // 1: gas_monitoring.GasPredictionRequest.updated_at:type_name -> google.protobuf.Timestamp
+	0, // 2: gas_monitoring.GasPredictionRequest.PredictResultEntry.value:type_name -> gas_monitoring.GasLevel
 	3, // [3:3] is the sub-list for method output_type
 	3, // [3:3] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name

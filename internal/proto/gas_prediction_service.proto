@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package gas_prediction;
+package gas_monitoring;
 
 option go_package  = "github.com/JeongWoo-Seo/eth-mon-svr/internal/pb";
 

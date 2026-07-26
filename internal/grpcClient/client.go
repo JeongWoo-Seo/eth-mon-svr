@@ -72,7 +72,8 @@ func (c *GasPredictionClient) startStreamWorker(ctx context.Context) {
 		streamErr := c.processStream(ctx, stream)
 		if streamErr != nil {
 			logger.Warn(ctx, "stream disconnected",
-				slog.String("system", "grpc client"))
+				slog.String("system", "grpc client"),
+				slog.Any("err", streamErr))
 		} else {
 			res, closeErr := stream.CloseAndRecv()
 			if closeErr != nil && closeErr != io.EOF {

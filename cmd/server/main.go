@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -72,7 +71,9 @@ func main() {
 	//////////////////////////
 	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(ctx, cfg.GrpcServerAddr)
 	if err != nil {
-		log.Fatalf("gRPC 클라이언트 초기화 실패: %v", err)
+		logger.Error(ctx, "fail to connet gRPC ",
+			err,
+			slog.String("system", "grpc client"))
 	}
 	defer cleanup()
 
