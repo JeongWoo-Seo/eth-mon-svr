@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -13,6 +14,7 @@ const (
 type BlockWorker struct {
 	header chan *types.Header
 	proc   Processor
+	wg     sync.WaitGroup
 }
 
 func NewBlockWorker(proc Processor) *BlockWorker {
@@ -23,20 +25,25 @@ func NewBlockWorker(proc Processor) *BlockWorker {
 }
 
 func (b *BlockWorker) Start(ctx context.Context) {
+	b.wg.Add(1)
+
 	go func() {
+		defer b.wg.Done()
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case header, ok := <-b.header:
-				if !ok { // b.headers가 닫혔을 때
-					return
-				}
-				//block 데이터 수집 및 상태 업데이트
+
+			case header := <-b.header:
 				b.proc.ProcessBlock(header)
 			}
 		}
 	}()
+}
+
+func (b *BlockWorker) Wait() {
+	b.wg.Wait()
 }
 
 func (b *BlockWorker) Input() chan<- *types.Header {

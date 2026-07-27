@@ -82,6 +82,10 @@ func (p *PendingWorker) worker(ctx context.Context) {
 	}
 }
 
+func (p *PendingWorker) Wait() {
+	p.wg.Wait()
+}
+
 func (p *PendingWorker) Input() chan<- string {
 	return p.jobs
 }

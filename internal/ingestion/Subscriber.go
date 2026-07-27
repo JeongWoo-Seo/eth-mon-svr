@@ -3,6 +3,7 @@ package ingestion
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
@@ -24,6 +25,7 @@ type Subscriber struct {
 	headerChan chan<- *types.Header
 	txHashChan chan<- string
 	dedup      *mempool.Cache
+	wg         sync.WaitGroup
 }
 
 func NewSubscriber(AlcUrl, InfUrl string, headerChan chan<- *types.Header, txHashChan chan<- string, dedup *mempool.Cache) *Subscriber {
@@ -37,8 +39,18 @@ func NewSubscriber(AlcUrl, InfUrl string, headerChan chan<- *types.Header, txHas
 }
 
 func (s *Subscriber) SubscriberStart(ctx context.Context) {
-	go subscription(ctx, s.AlcWsUrl, "Header", "newHeads", headBufferSize, s.headerChan, nil)
-	go subscription(ctx, s.AlcWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		subscription(ctx, s.AlcWsUrl, "Header", "newHeads", headBufferSize, s.headerChan, nil)
+	}()
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		subscription(ctx, s.AlcWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
+	}()
+
 	//go subscription(ctx, s.InfWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
 }
 
@@ -132,4 +144,8 @@ func connectAndStream[T any](
 			}
 		}
 	}
+}
+
+func (s *Subscriber) Wait() {
+	s.wg.Wait()
 }

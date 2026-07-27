@@ -116,8 +116,11 @@ func main() {
 	// server shutdown
 	//////////////////////////
 	<-ctx.Done()
+	logger.Info(context.Background(), "shutdown requested")
+
+	sub.Wait()
+	pendingWorker.Wait()
+	blockWorker.Wait()
 
 	logger.Info(context.Background(), "Shutting down server...")
-
-	time.Sleep(2 * time.Second)
 }
