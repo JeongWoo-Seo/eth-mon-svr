@@ -1,8 +1,8 @@
 package gasanalyzer
 
 import (
+	"cmp"
 	"context"
-	"fmt"
 	"log/slog"
 	"math"
 	"math/big"
@@ -119,104 +119,95 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 		return defaultValue()
 	}
 
-	// 정렬
-	slices.SortFunc(poolData, func(a, b WeightedTip) int {
-		if a.Tip < b.Tip {
-			return -1
-		}
-		if a.Tip > b.Tip {
-			return 1
-		}
-		return 0
-	})
+	// Tip 오름차순 정렬
+	slices.SortFunc(poolData,
+		func(a, b WeightedTip) int {
+			return cmp.Compare(a.Tip, b.Tip)
+		},
+	)
 
-	// 전체 weight 합
-	var totalWeight float64
-	for _, tip := range poolData {
-		totalWeight += tip.Weight
+	// 전체 weight 계산
+	totalWeight := totalWeight(poolData)
+
+	if totalWeight == 0 {
+		return defaultValue()
 	}
 
-	analysisResults := make([]float64, len(GasAnalysisTargets))
-	var cumulativeWeight float64
-	analysisIdx := 0
+	// P40 ~ P95 계산
+	percentiles := a.calculatePercentiles(poolData, totalWeight)
+	result := make(map[string]uint64, len(GasPredictionTargets))
 
-	for _, tx := range poolData {
-		cumulativeWeight += tx.Weight
+	for _, target := range GasPredictionTargets {
+		group := PredictionGroups[target.GroupKey]
 
-		for analysisIdx < len(GasAnalysisTargets) && cumulativeWeight >= GasAnalysisTargets[analysisIdx]*totalWeight {
-			analysisResults[analysisIdx] = float64(tx.Tip)
-			analysisIdx++
+		// 그룹 없는 경우
+		if len(group) == 0 {
+			result[target.Name] = percentiles[target.Index]
+			continue
 		}
 
-		if analysisIdx >= len(GasAnalysisTargets) {
+		result[target.Name] = calculateWeightedValue(percentiles, group)
+	}
+
+	return result
+}
+
+func totalWeight(poolData []WeightedTip) float64 {
+	var total float64
+	for _, tx := range poolData {
+		total += tx.Weight
+	}
+
+	return total
+}
+
+func (a *Analyzer) calculatePercentiles(poolData []WeightedTip, totalWeight float64) []uint64 {
+	results := make([]uint64, len(GasAnalysisTargets))
+
+	var cumulative float64
+	index := 0
+
+	for _, tx := range poolData {
+		cumulative += tx.Weight
+		for index < len(GasAnalysisTargets) && cumulative >= GasAnalysisTargets[index]*totalWeight {
+			results[index] = tx.Tip
+			index++
+		}
+
+		if index >= len(results) {
 			break
 		}
 	}
 
-	//팁이 남은경우 채우기
-	lastTip := float64(poolData[len(poolData)-1].Tip)
-	for analysisIdx < len(GasAnalysisTargets) {
-		analysisResults[analysisIdx] = lastTip
-		analysisIdx++
+	// 부족한 percentile은 마지막 값 사용
+	lastTip := poolData[len(poolData)-1].Tip
+	for index < len(results) {
+		results[index] = lastTip
+		index++
 	}
 
-	//P50,P75,P90
-	result := make(map[string]uint64, len(GasPredictionTargets))
+	return results
+}
 
-	for _, target := range GasPredictionTargets {
-		groupKey := target.Name
-		if groupKey == "market" {
-			groupKey = "p50"
-		}
-		if groupKey == "fast" {
-			groupKey = "p75"
-		}
-		if groupKey == "urgent" {
-			groupKey = "p90"
-		}
+func calculateWeightedValue(values []uint64, group []WeightPoint) uint64 {
+	var sum float64
+	var weight float64
 
-		group, exist := PredictionGroups[groupKey]
-
-		// 그룹 설정이 없거나 비어있다면, 단일 값으로
-		if !exist || len(group) == 0 {
-			// 0.40부터 0.05 단위이므로 안전하게 반올림하여 인덱스 계산
-			idx := int(((target.Ratio - 0.40) / 0.05) + 0.5)
-			if idx >= 0 && idx < len(analysisResults) {
-				result[target.Name] = uint64(analysisResults[idx] + 0.5)
-			} else {
-				result[target.Name] = 0
-			}
+	for _, wp := range group {
+		//0 <= index <= len(values) 범위를 넘는 것을 방지하기 위해
+		if wp.Index < 0 || wp.Index >= len(values) {
 			continue
 		}
 
-		var sumTips float64
-		var sumWeights float64
-		for _, wp := range group {
-			// 인덱스 바운드 체크
-			if wp.Index >= 0 && wp.Index < len(analysisResults) {
-				sumTips += analysisResults[wp.Index] * wp.Weight
-				sumWeights += wp.Weight
-			}
-		}
-
-		// 2. 최종 가중치 계산 및 반올림 처리
-		if sumWeights > 0 {
-			finalTip := sumTips / sumWeights
-
-			// [도메인 보정 로직 추가 가능 기점]
-			// 예: urgent의 경우 하방 평균으로 인해 값이 낮아지므로 원래 P90 값보다 낮아지지 않도록 방어선 구축
-			if groupKey == "p90" && finalTip < analysisResults[P90] {
-				// 가중 평균이 실제 P90보다 낮다면 안전을 위해 실제 P90 값을 선택하거나 패널티 상향
-				finalTip = analysisResults[P90]
-			}
-
-			result[target.Name] = uint64(finalTip + 0.5)
-		} else {
-			result[target.Name] = 0
-		}
+		sum += float64(values[wp.Index]) * wp.Weight
+		weight += wp.Weight
 	}
 
-	return result
+	if weight == 0 {
+		return 0
+	}
+
+	return uint64(sum / weight)
 }
 
 func defaultValue() map[string]uint64 {
@@ -236,8 +227,8 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee
 	if nextBaseFee != nil {
 		a.latestResult.NextBaseFee = nextBaseFee.Uint64()
 	}
-	if a.latestResult.predictResult == nil {
-		a.latestResult.predictResult = make(map[string]GasLevel)
+	if a.latestResult.PredictResult == nil {
+		a.latestResult.PredictResult = make(map[string]GasLevel)
 	}
 
 	// BaseFee 변화 추세를 기반 가중치
@@ -253,33 +244,21 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee
 
 	// 각 가스 등급별 예측 타겟 연산 및 보정
 	for _, t := range GasPredictionTargets {
-		if _, ok := a.latestResult.analyzerBlock[t.Name]; ok {
-			anaBlock := uint64(a.latestResult.analyzerBlock[t.Name].PriorityFee)
-			anaPending := uint64(a.latestResult.analyzerPending[t.Name].PriorityFee)
+		if _, ok := a.latestResult.AnalyzerBlock[t.Name]; ok {
+			anaBlock := uint64(a.latestResult.AnalyzerBlock[t.Name].PriorityFee)
+			anaPending := uint64(a.latestResult.AnalyzerPending[t.Name].PriorityFee)
 
 			blend := float64(anaBlock)*0.2 + float64(anaPending)*0.8
 			priorityFee := uint64(blend * multiplier)
 
-			// 3-3. 하한선 및 음수 방지 예외 처리 (특히 low 등급 방어)
-			var minLimit uint64 = 1440000 // 체인별 최저 PriorityFee 하한선 설정
-			if t.Name == "low" && priorityFee < minLimit {
-				priorityFee = minLimit
-			} else if priorityFee < 0 {
-				priorityFee = 0
-			}
-
-			a.latestResult.predictResult[t.Name] = GasLevel{
+			a.latestResult.PredictResult[t.Name] = GasLevel{
 				PriorityFee: priorityFee,
 				MaxFee:      a.latestResult.NextBaseFee + priorityFee,
 			}
 
-			// sAnaBlock := humanize.Comma(int64(anaBlock))
-			// sAnaPending := humanize.Comma(int64(anaPending))
-			// sFinalFee := humanize.Comma(int64(priorityFee))
-			// fmt.Printf("%-10s | %-14s | %-14s \n", t.Name, sAnaBlock, sAnaPending, sFinalFee, )
-
 		} else {
-			fmt.Printf("%-10s | 데이터 없음\n", t.Name)
+			logger.Warn(context.Background(), "result data is empty",
+				slog.String("sysyem", "analysis"))
 		}
 	}
 
@@ -291,8 +270,8 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee
 
 func (a *Analyzer) sendResultToGRPC(result *GasPrediction) {
 	//pb 형태로 변환
-	pbPredictResult := make(map[string]*pb.GasLevel, len(result.predictResult))
-	for k, v := range result.predictResult {
+	pbPredictResult := make(map[string]*pb.GasLevel, len(result.PredictResult))
+	for k, v := range result.PredictResult {
 		pbPredictResult[k] = &pb.GasLevel{
 			PriorityFee: v.PriorityFee,
 			MaxFee:      v.MaxFee,
@@ -315,12 +294,7 @@ func (a *Analyzer) GetPrediction() GasPrediction {
 	return a.latestResult
 }
 
-func (a *Analyzer) UpdateLatestBlockData(
-	blockNumber uint64,
-	baseFee *big.Int,
-	gasUsed, gasLimit uint64,
-	nextBaseFee *big.Int,
-) {
+func (a *Analyzer) UpdateLatestBlockData(blockNumber uint64, baseFee *big.Int, gasUsed, gasLimit uint64, nextBaseFee *big.Int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -342,7 +316,7 @@ func (a *Analyzer) UpdateAnalBlockTxPredictionGasResult(result map[string]uint64
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.latestResult.analyzerBlock = make(map[string]GasLevel, len(result))
+	a.latestResult.AnalyzerBlock = make(map[string]GasLevel, len(result))
 
 	var baseFee uint64
 	if a.latestBlockData.NextBaseFee != nil {
@@ -350,7 +324,7 @@ func (a *Analyzer) UpdateAnalBlockTxPredictionGasResult(result map[string]uint64
 	}
 
 	for level, fee := range result {
-		a.latestResult.analyzerBlock[level] = GasLevel{
+		a.latestResult.AnalyzerBlock[level] = GasLevel{
 			PriorityFee: fee,
 			MaxFee:      baseFee + fee,
 		}
@@ -361,7 +335,7 @@ func (a *Analyzer) UpdateAnalPendingTxPredictionGasResult(result map[string]uint
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.latestResult.analyzerPending = make(map[string]GasLevel, len(result))
+	a.latestResult.AnalyzerPending = make(map[string]GasLevel, len(result))
 
 	var baseFee uint64
 	if a.latestBlockData.NextBaseFee != nil {
@@ -369,7 +343,7 @@ func (a *Analyzer) UpdateAnalPendingTxPredictionGasResult(result map[string]uint
 	}
 
 	for level, fee := range result {
-		a.latestResult.analyzerPending[level] = GasLevel{
+		a.latestResult.AnalyzerPending[level] = GasLevel{
 			PriorityFee: fee,
 			MaxFee:      baseFee + fee,
 		}

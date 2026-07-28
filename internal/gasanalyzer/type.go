@@ -5,10 +5,26 @@ import (
 	"time"
 )
 
+// 실제 측정값 정리
 var GasPredictionTargets = []TargetPercentile{
-	{"market", 0.50},
-	{"fast", 0.75},
-	{"urgent", 0.90},
+	{
+		Name:       "market",
+		Percentile: 0.50,
+		Index:      P50,
+		GroupKey:   "p50",
+	},
+	{
+		Name:       "fast",
+		Percentile: 0.75,
+		Index:      P75,
+		GroupKey:   "p75",
+	},
+	{
+		Name:       "urgent",
+		Percentile: 0.90,
+		Index:      P90,
+		GroupKey:   "p90",
+	},
 }
 
 var GasAnalysisTargets = []float64{
@@ -41,36 +57,41 @@ const (
 	P95
 )
 
+type TargetPercentile struct {
+	Name       string
+	Percentile float64
+	Index      int
+	GroupKey   string
+}
+
 type WeightPoint struct {
 	Index  int
 	Weight float64
 }
 
 var PredictionGroups = map[string][]WeightPoint{
-	"p50": {
-		{P40, 1},
-		{P45, 2},
-		{P50, 4},
-		{P55, 2},
-		{P60, 1},
-	},
-	"p75": {
-		{P65, 1},
-		{P70, 2},
-		{P75, 6},
-		{P80, 2},
-		{P85, 1},
-	},
-	"p90": {
-		{P85, 1},
-		{P90, 5},
-		{P95, 1},
-	},
-}
 
-type TargetPercentile struct {
-	Name  string
-	Ratio float64
+	"p50": {
+		{Index: P40, Weight: 1},
+		{Index: P45, Weight: 2},
+		{Index: P50, Weight: 4},
+		{Index: P55, Weight: 2},
+		{Index: P60, Weight: 1},
+	},
+
+	"p75": {
+		{Index: P65, Weight: 1},
+		{Index: P70, Weight: 2},
+		{Index: P75, Weight: 6},
+		{Index: P80, Weight: 2},
+		{Index: P85, Weight: 1},
+	},
+
+	"p90": {
+		{Index: P85, Weight: 1},
+		{Index: P90, Weight: 5},
+		{Index: P95, Weight: 1},
+	},
 }
 
 type WeightedTip struct {
@@ -91,9 +112,9 @@ type GasLevel struct {
 type GasPrediction struct {
 	NextBlockNumber uint64 `json:"blockNumber"`
 	NextBaseFee     uint64 `json:"nextBaseFee"`
-	predictResult   map[string]GasLevel
-	analyzerBlock   map[string]GasLevel
-	analyzerPending map[string]GasLevel
+	PredictResult   map[string]GasLevel
+	AnalyzerBlock   map[string]GasLevel
+	AnalyzerPending map[string]GasLevel
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
 

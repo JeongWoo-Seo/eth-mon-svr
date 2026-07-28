@@ -16,17 +16,17 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 	a.mu.Unlock()
 
 	ctx := context.Background()
-	if preResult.NextBlockNumber == 0 || preResult.analyzerBlock == nil {
+	if preResult.NextBlockNumber == 0 || preResult.AnalyzerBlock == nil {
 		logger.Info(ctx, "empty result data",
 			"system", "analysis",
 			"block_num", preResult.NextBlockNumber)
 		return
 	}
 
-	per := make([]float64, 0, len(GasPredictionTargets))
 	//0.90 -> 90 으로 변환하기위한 과정
+	per := make([]float64, 0, len(GasPredictionTargets))
 	for _, t := range GasPredictionTargets {
-		per = append(per, t.Ratio*100)
+		per = append(per, t.Percentile*100)
 	}
 
 	history, err := client.FeeHistory(ctx, 1, big.NewInt(int64(preResult.NextBlockNumber)), per)
@@ -46,11 +46,11 @@ func (a *Analyzer) CompareFeeHistory(client *ethclient.Client) {
 
 			actualTip := reward[i].Uint64()
 
-			if _, ok := preResult.analyzerBlock[t.Name]; ok {
-				anaBlock := int64(preResult.analyzerBlock[t.Name].PriorityFee)
-				anaPending := int64(preResult.analyzerPending[t.Name].PriorityFee)
+			if _, ok := preResult.AnalyzerBlock[t.Name]; ok {
+				anaBlock := int64(preResult.AnalyzerBlock[t.Name].PriorityFee)
+				anaPending := int64(preResult.AnalyzerPending[t.Name].PriorityFee)
 
-				blend := int64(preResult.predictResult[t.Name].PriorityFee)
+				blend := int64(preResult.PredictResult[t.Name].PriorityFee)
 				diff := blend - int64(actualTip)
 
 				sAnaBlock := humanize.Comma(anaBlock)

@@ -118,7 +118,7 @@ func (h *Histogram) PercentileGas(targets []TargetPercentile) (map[string]uint64
 	// 2. 각 가스 레벨(Target)별 독립적인 백분위 연산
 	for _, target := range targets {
 		// 목표로 하는 누적 가스량 지점 계산
-		targetValue := totalGas * target.Ratio
+		targetValue := totalGas * target.Percentile
 
 		// ✨ [핵심 교정] 각 타겟마다 인덱스와 누적 가스 합산량을 0에서부터 새로 시작합니다.
 		bucketIdx := 0

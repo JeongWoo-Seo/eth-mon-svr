@@ -105,7 +105,7 @@ func (c *GasPredictionClient) processStream(ctx context.Context, stream pb.GasPr
 				return nil
 			}
 
-			// 💡 스트림 메시지 전송
+			//스트림 메시지 전송
 			if err := stream.Send(req); err != nil {
 				logger.Error(ctx, "failed to send gas prediction via stream",
 					err,
