@@ -190,7 +190,7 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 	if len(blockData) == 0 {
 		return
 	}
-	pool := make([]gasanalyzer.WeightedTip, 0, len(blockData)*200)
+	pool := make([]gasanalyzer.WeightedTip, 0, len(blockData)*300)
 
 	for i, b := range blockData {
 		if i >= len(p.gasanalyzer.DecayTable) {

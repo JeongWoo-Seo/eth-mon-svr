@@ -232,14 +232,14 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee
 	}
 
 	// BaseFee 변화 추세를 기반 가중치
-	const sensitivity = 1.2
+	const sensitivity = 0.6
 	multiplier := 1.0
 
 	if currentBaseFee != nil && nextBaseFee != nil && currentBaseFee.Sign() > 0 {
-		current := currentBaseFee.Int64()
-		next := nextBaseFee.Int64()
-		rate := float64(next-current) / float64(current)
-		multiplier = 1.0 + (rate * sensitivity)
+		// current := currentBaseFee.Int64()
+		// next := nextBaseFee.Int64()
+		// rate := float64(next-current) / float64(current)
+		// multiplier = 1.0 + (rate * sensitivity)
 	}
 
 	// 각 가스 등급별 예측 타겟 연산 및 보정
