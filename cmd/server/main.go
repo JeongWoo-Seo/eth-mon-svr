@@ -78,18 +78,29 @@ func main() {
 	defer cleanup()
 
 	//////////////////////////
-	// set pool, processor, mempool
+	// set mempool pending and block
 	//////////////////////////
-	pendingPool := mempool.NewPendingMemPool(400, 20*time.Second)
+	pendingPool, poolErr := mempool.NewPendingMemPool(cfg.EthSepoliaChainId, 20)
+	if poolErr != nil {
+		logger.Error(ctx, "failed to initialize pending pool",
+			err,
+			slog.String("system", "mempool"))
+		panic(err)
+	}
+
 	dedup, err := mempool.NewCache(10000, 2*time.Minute)
 	if err != nil {
 		logger.Error(ctx, "failed to initialize mempool cache",
 			err,
-			slog.String("system", "lru"))
+			slog.String("system", "mempool"))
 		panic(err)
 	}
+
 	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
+	//////////////////////////
+	// start processor
+	//////////////////////////
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, grpcClient)
 	proc := processor.NewProcess(pendingPool, blockstore, alcEthClient.EthClient, infEthClient.EthClient, analyzer)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)

@@ -3,7 +3,6 @@ package processor
 import (
 	"context"
 	"log/slog"
-	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
@@ -17,13 +16,6 @@ const (
 	receiptCuPerTx    = 15
 	getBlockReceiptCu = 250
 )
-
-var minedHashPool = sync.Pool{
-	New: func() interface{} {
-		// 초기 캡시티는 프로젝트의 평균 블록당 트랙잭션 수
-		return make(map[string]struct{}, 256)
-	},
-}
 
 func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions) ([]*types.Receipt, error) {
 	if len(txs) == 0 {
@@ -147,28 +139,12 @@ func (p *Process) CompareFeeHistory(ctx context.Context) {
 	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
 }
 
-func (p *Process) ClearMempool(ctx context.Context) {
-	p.pendingPool.Clear()
-}
-
 func (p *Process) ClearMempoolToTx(ctx context.Context, header *types.Header, receipts []*types.Receipt) {
 	if len(receipts) == 0 {
 		return
 	}
 
-	//sync.Pool에서 슬라이스 메모리 빌리기
-	minedHashes := minedHashPool.Get().(map[string]struct{})
-	for _, receipt := range receipts {
-		minedHashes[receipt.TxHash.Hex()] = struct{}{}
-	}
-
-	removedCnt := p.pendingPool.CollectAndClean(minedHashes)
-
-	//모든 데이터 삭제
-	for k := range minedHashes {
-		delete(minedHashes, k)
-	}
-	minedHashPool.Put(minedHashes)
+	removedCnt := p.pendingPool.RemoveByReceipts(receipts)
 
 	if removedCnt > 0 {
 		logger.Info(ctx, "Transactions cleared from mempool",
@@ -211,10 +187,10 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 	// 가스 분석을 위한 블록 정보 업데이트
 	p.gasanalyzer.UpdateLatestBlockData(
 		currentBlockNumber,
-		header.BaseFee,
+		header.BaseFee.Uint64(),
 		header.GasUsed,
 		header.GasLimit,
-		nextBaseFee,
+		nextBaseFee.Uint64(),
 	)
 	p.gasanalyzer.UpdateAnalBlockTxPredictionGasResult(blockResult)
 }

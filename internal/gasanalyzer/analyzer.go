@@ -5,7 +5,6 @@ import (
 	"context"
 	"log/slog"
 	"math"
-	"math/big"
 	"slices"
 	"sync"
 	"time"
@@ -41,10 +40,6 @@ func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, grpcClient 
 		a.DecayTable[age] = math.Exp(-lamda * float64(age))
 	}
 
-	//초기 기본값 설정
-	a.latestBlockData.NextBaseFee = new(big.Int)
-	a.latestBlockData.BaseFee = new(big.Int)
-
 	return a
 }
 
@@ -67,8 +62,8 @@ func (a *Analyzer) Start(ctx context.Context) {
 func (a *Analyzer) AnalyzeGasPrice() {
 	a.mu.RLock()
 	nextBlockNum := a.latestBlockData.BlockNumber + 1
-	nextBaseFee := new(big.Int).Set(a.latestBlockData.NextBaseFee)
-	currentBaseFee := new(big.Int).Set(a.latestBlockData.BaseFee)
+	nextBaseFee := a.latestBlockData.NextBaseFee
+	currentBaseFee := a.latestBlockData.BaseFee
 	a.mu.RUnlock()
 
 	//pending tx weight 계산
@@ -93,17 +88,17 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	)
 }
 
-func (a *Analyzer) collectPendingTx(nextBaseFee *big.Int, gasLimit uint64) []WeightedTip {
+func (a *Analyzer) collectPendingTx(nextBaseFee, blockGasLimit uint64) []WeightedTip {
 	pendingData := a.pendingPool.Snapshot()
 	pool := make([]WeightedTip, 0, len(pendingData))
 
 	for _, tx := range pendingData {
-		tip, ok := a.EffectiveTip(tx.GasFeeCap, tx.GasTipCap, nextBaseFee)
+		tip, ok := a.EffectiveTip(tx.FeeCap, tx.TipCap, nextBaseFee)
 		if !ok {
 			continue
 		}
 
-		weight := a.CalculateWeightForGasUsed(tx.Gas, gasLimit)
+		weight := a.CalculateWeightForGasUsed(tx.GasLimit, blockGasLimit)
 
 		pool = append(pool, WeightedTip{
 			Tip:    tip,
@@ -219,14 +214,12 @@ func defaultValue() map[string]uint64 {
 	}
 }
 
-func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee *big.Int) *GasPrediction {
+func (a *Analyzer) UpdateResult(nextBlockNum, currentBaseFee, nextBaseFee uint64) *GasPrediction {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	a.latestResult.NextBlockNumber = nextBlockNum
-	if nextBaseFee != nil {
-		a.latestResult.NextBaseFee = nextBaseFee.Uint64()
-	}
+	a.latestResult.NextBaseFee = nextBaseFee
 	if a.latestResult.PredictResult == nil {
 		a.latestResult.PredictResult = make(map[string]GasLevel)
 	}
@@ -234,13 +227,10 @@ func (a *Analyzer) UpdateResult(nextBlockNum uint64, currentBaseFee, nextBaseFee
 	// BaseFee 변화 추세를 기반 가중치
 	const sensitivity = 0.6
 	multiplier := 1.0
-
-	if currentBaseFee != nil && nextBaseFee != nil && currentBaseFee.Sign() > 0 {
-		// current := currentBaseFee.Int64()
-		// next := nextBaseFee.Int64()
-		// rate := float64(next-current) / float64(current)
-		// multiplier = 1.0 + (rate * sensitivity)
-	}
+	// current := currentBaseFee.Int64()
+	// next := nextBaseFee.Int64()
+	// rate := float64(next-current) / float64(current)
+	// multiplier = 1.0 + (rate * sensitivity)
 
 	// 각 가스 등급별 예측 타겟 연산 및 보정
 	for _, t := range GasPredictionTargets {
@@ -294,18 +284,14 @@ func (a *Analyzer) GetPrediction() GasPrediction {
 	return a.latestResult
 }
 
-func (a *Analyzer) UpdateLatestBlockData(blockNumber uint64, baseFee *big.Int, gasUsed, gasLimit uint64, nextBaseFee *big.Int) {
+func (a *Analyzer) UpdateLatestBlockData(blockNumber, baseFee, gasUsed, gasLimit, nextBaseFee uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	//deap copy
-	tmBaseFee := new(big.Int).Set(baseFee)
-	tmNextBaseFee := new(big.Int).Set(nextBaseFee)
-
 	a.latestBlockData = BlockAnalysisData{
 		BlockNumber: blockNumber,
-		BaseFee:     tmBaseFee,
-		NextBaseFee: tmNextBaseFee,
+		BaseFee:     baseFee,
+		NextBaseFee: nextBaseFee,
 		GasUsed:     gasUsed,
 		GasLimit:    gasLimit,
 		UpdatedAt:   time.Now(),
@@ -317,11 +303,7 @@ func (a *Analyzer) UpdateAnalBlockTxPredictionGasResult(result map[string]uint64
 	defer a.mu.Unlock()
 
 	a.latestResult.AnalyzerBlock = make(map[string]GasLevel, len(result))
-
-	var baseFee uint64
-	if a.latestBlockData.NextBaseFee != nil {
-		baseFee = a.latestBlockData.NextBaseFee.Uint64()
-	}
+	baseFee := a.latestBlockData.NextBaseFee
 
 	for level, fee := range result {
 		a.latestResult.AnalyzerBlock[level] = GasLevel{
@@ -336,11 +318,7 @@ func (a *Analyzer) UpdateAnalPendingTxPredictionGasResult(result map[string]uint
 	defer a.mu.Unlock()
 
 	a.latestResult.AnalyzerPending = make(map[string]GasLevel, len(result))
-
-	var baseFee uint64
-	if a.latestBlockData.NextBaseFee != nil {
-		baseFee = a.latestBlockData.NextBaseFee.Uint64()
-	}
+	baseFee := a.latestBlockData.NextBaseFee
 
 	for level, fee := range result {
 		a.latestResult.AnalyzerPending[level] = GasLevel{
@@ -348,4 +326,11 @@ func (a *Analyzer) UpdateAnalPendingTxPredictionGasResult(result map[string]uint
 			MaxFee:      baseFee + fee,
 		}
 	}
+}
+
+func (a *Analyzer) GetCurrentBlockNum() uint64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return a.latestBlockData.BlockNumber
 }

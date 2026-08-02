@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"math"
-	"math/big"
 	"sync"
 	"time"
 
@@ -27,10 +26,6 @@ func NewGasOracle(pendingPool *mempool.PendingMemPool) *GasOracle {
 		BlockHist:   NewHistogram(),
 		PendingHist: NewHistogram(),
 		pendingPool: pendingPool,
-		latestBlockData: BlockAnalysisData{
-			NextBaseFee: new(big.Int),
-			BaseFee:     new(big.Int),
-		},
 	}
 }
 
@@ -50,23 +45,14 @@ func (o *GasOracle) Start(ctx context.Context) {
 	}
 }
 
-func (o *GasOracle) UpdateLatestBlockData(
-	blockNumber uint64,
-	baseFee *big.Int,
-	gasUsed, gasLimit uint64,
-	nextBaseFee *big.Int,
-) {
+func (o *GasOracle) UpdateLatestBlockData(blockNumber, baseFee, gasUsed, gasLimit, nextBaseFee uint64) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	//deap copy
-	tmBaseFee := new(big.Int).Set(baseFee)
-	tmNextBaseFee := new(big.Int).Set(nextBaseFee)
-
 	o.latestBlockData = BlockAnalysisData{
 		BlockNumber: blockNumber,
-		BaseFee:     tmBaseFee,
-		NextBaseFee: tmNextBaseFee,
+		BaseFee:     baseFee,
+		NextBaseFee: nextBaseFee,
 		GasUsed:     gasUsed,
 		GasLimit:    gasLimit,
 		UpdatedAt:   time.Now(),
@@ -76,7 +62,7 @@ func (o *GasOracle) UpdateLatestBlockData(
 func (o *GasOracle) GasPrediction() {
 	o.mu.RLock()
 	nextBlockNum := o.latestBlockData.BlockNumber + 1
-	nextBaseFee := new(big.Int).Set(o.latestBlockData.NextBaseFee)
+	nextBaseFee := o.latestBlockData.NextBaseFee
 	o.mu.RUnlock()
 
 	// Pending Histogram 갱신
@@ -118,31 +104,29 @@ func (o *GasOracle) GasPrediction() {
 	)
 }
 
-func (o *GasOracle) collectPendingTx(nextBaseFee *big.Int) []GasTip {
+func (o *GasOracle) collectPendingTx(nextBaseFee uint64) []GasTip {
 	pendingData := o.pendingPool.Snapshot()
 
 	pool := make([]GasTip, 0, len(pendingData))
 
 	for _, tx := range pendingData {
-
-		// 이미 포함 불가능한 tx
-		if tx.GasFeeCap.Cmp(nextBaseFee) <= 0 {
+		// 다음 블록에 포함될 수 없는 트랜잭션
+		if tx.FeeCap <= nextBaseFee {
 			continue
 		}
 
-		feeMinusBase := new(big.Int).Sub(tx.GasFeeCap, nextBaseFee)
+		// effectiveTip = min(GasTipCap, GasFeeCap - BaseFee)
+		diff := tx.FeeCap - nextBaseFee
 
-		tip := tx.GasTipCap
-		if feeMinusBase.Cmp(tip) < 0 {
-			tip = feeMinusBase
+		tip := tx.TipCap
+		if diff < tip {
+			tip = diff
 		}
 
-		if !tip.IsUint64() {
-			continue
-		}
-		adjustedGas := uint64(math.Round(math.Sqrt(float64(tx.Gas))))
+		adjustedGas := uint64(math.Round(math.Sqrt(float64(tx.GasLimit))))
+
 		pool = append(pool, GasTip{
-			Tip: tip.Uint64(),
+			Tip: tip,
 			Gas: adjustedGas,
 		})
 	}
@@ -150,13 +134,12 @@ func (o *GasOracle) collectPendingTx(nextBaseFee *big.Int) []GasTip {
 	return pool
 }
 
-func (o *GasOracle) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int, result1 map[string]uint64, result2 map[string]uint64) {
-	u64NextBaseFee := nextBaseFee.Uint64()
+func (o *GasOracle) UpdateResult(nextBlockNum, nextBaseFee uint64, result1 map[string]uint64, result2 map[string]uint64) {
 	levels1 := make(map[string]GasLevel)
 	for p, r := range result1 {
 		levels1[p] = GasLevel{
 			PriorityFee: r,
-			MaxFee:      u64NextBaseFee + r,
+			MaxFee:      nextBaseFee + r,
 		}
 	}
 
@@ -164,7 +147,7 @@ func (o *GasOracle) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int, resu
 	for p, r := range result2 {
 		levels2[p] = GasLevel{
 			PriorityFee: r,
-			MaxFee:      u64NextBaseFee + r,
+			MaxFee:      nextBaseFee + r,
 		}
 	}
 	o.mu.Lock()
@@ -172,7 +155,7 @@ func (o *GasOracle) UpdateResult(nextBlockNum uint64, nextBaseFee *big.Int, resu
 
 	o.latestResult = GasPrediction{
 		NextBlockNumber: nextBlockNum,
-		NextBaseFee:     u64NextBaseFee,
+		NextBaseFee:     nextBaseFee,
 
 		UpdatedAt: time.Now(),
 	}

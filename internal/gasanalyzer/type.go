@@ -1,7 +1,6 @@
 package gasanalyzer
 
 import (
-	"math/big"
 	"time"
 )
 
@@ -121,8 +120,8 @@ type GasPrediction struct {
 
 type BlockAnalysisData struct {
 	BlockNumber uint64
-	BaseFee     *big.Int
-	NextBaseFee *big.Int
+	BaseFee     uint64
+	NextBaseFee uint64
 	GasUsed     uint64
 	GasLimit    uint64
 	TipPool     []WeightedTip

@@ -1,41 +1,45 @@
 package mempool
 
 import (
-	"container/heap"
+	"fmt"
 	"math/big"
 	"sync"
-	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type PendingMemPool struct {
-	mu      sync.RWMutex
-	heap    *minTipHeap
-	maxSize int
-	ttl     time.Duration
+	mu            sync.RWMutex
+	Signer        types.Signer
+	Accounts      map[common.Address]*AccountPending //from -> []nonce -> tx
+	ExpireBuckets map[uint64][]*PendingTx            // blocknum -> []tx
+	HashIndex     map[common.Hash]*PendingTx         //hash -> tx
+	TTLBlock      uint64
 }
 
-func NewPendingMemPool(maxSize int, ttl time.Duration) *PendingMemPool {
-	h := &minTipHeap{}
-	heap.Init(h)
+func NewPendingMemPool(chainID string, ttlblock uint64) (*PendingMemPool, error) {
+	id, ok := new(big.Int).SetString(chainID, 10)
+	if !ok {
+		return nil, fmt.Errorf("invalid chain ID: %q", chainID)
+	}
 
 	return &PendingMemPool{
-		heap:    h,
-		maxSize: maxSize,
-		ttl:     ttl,
-	}
+		Signer:        types.LatestSignerForChainID(id),
+		Accounts:      make(map[common.Address]*AccountPending),
+		ExpireBuckets: make(map[uint64][]*PendingTx),
+		HashIndex:     make(map[common.Hash]*PendingTx),
+		TTLBlock:      ttlblock,
+	}, nil
 }
 
-func (pool *PendingMemPool) PushBatch(txs []*types.Transaction) {
+func (pool *PendingMemPool) PushBatch(txs []*types.Transaction, currentBlock uint64) {
 	if len(txs) == 0 {
 		return
 	}
 
-	now := time.Now()
-
+	validTx := make([]*PendingTx, 0, len(txs))
 	//락을 잡기 전에 데이터 변환 및 유효성 검사
-	validTxs := make([]PendingTxInfo, 0, len(txs))
 	for _, tx := range txs {
 		if tx == nil {
 			continue
@@ -47,111 +51,182 @@ func (pool *PendingMemPool) PushBatch(txs []*types.Transaction) {
 			tipCap = tx.GasPrice()
 		}
 
-		if tipCap == nil || tx.Gas() == 0 {
+		feeCap := tx.GasFeeCap()
+		if feeCap == nil {
+			feeCap = tx.GasPrice()
+		}
+
+		if tipCap == nil || feeCap == nil || tx.Gas() == 0 {
 			continue
 		}
 
-		validTxs = append(validTxs, PendingTxInfo{
-			Hash:      tx.Hash().Hex(),
-			GasFeeCap: tx.GasFeeCap(),
-			GasTipCap: tipCap,
-			Gas:       tx.Gas(),
-			Timestamp: now,
+		//오버플로우 대비
+		if !feeCap.IsUint64() || !tipCap.IsUint64() {
+			continue
+		}
+
+		from, err := types.Sender(pool.Signer, tx)
+		if err != nil {
+			continue
+		}
+
+		validTx = append(validTx, &PendingTx{
+			Hash:        tx.Hash(),
+			From:        from,
+			Nonce:       tx.Nonce(),
+			FeeCap:      feeCap.Uint64(),
+			TipCap:      tipCap.Uint64(),
+			GasLimit:    tx.Gas(),
+			SeenBlock:   currentBlock,
+			ExpireBlock: currentBlock + pool.TTLBlock,
+			ExpireIndex: -1,
 		})
 	}
 
-	if len(validTxs) == 0 {
+	if len(validTx) == 0 {
 		return
 	}
 
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	for _, tx := range validTxs {
-		if pool.heap.Len() < pool.maxSize {
-			heap.Push(pool.heap, tx)
-		} else {
-			lst := pool.heap.Peak()
-			if lst.GasTipCap != nil && tx.GasTipCap.Cmp(lst.GasTipCap) > 0 {
-				heap.Pop(pool.heap)
-				heap.Push(pool.heap, tx)
+	for _, tx := range validTx {
+		// 새로운 계좌를 accouts에 추가
+		account, ok := pool.Accounts[tx.From]
+		if !ok {
+			account = &AccountPending{
+				NonceMap: make(map[uint64]*PendingTx),
 			}
 		}
+
+		//기존 tx를 replacemenet/cancel 한다면 기존 hash 값을 삭제
+		if old, ok := account.NonceMap[tx.Nonce]; ok {
+			if tx.TipCap <= old.TipCap || tx.FeeCap <= old.FeeCap {
+				continue
+			}
+
+			pool.removeExpireBucket(old)
+			delete(pool.HashIndex, old.Hash)
+		}
+
+		account.NonceMap[tx.Nonce] = tx
+		pool.Accounts[tx.From] = account
+		pool.HashIndex[tx.Hash] = tx
+		pool.addExpireBucket(tx)
 	}
 }
 
-func (pool *PendingMemPool) Clear() {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+func (pool *PendingMemPool) addExpireBucket(tx *PendingTx) {
+	list := pool.ExpireBuckets[tx.ExpireBlock]
+	tx.ExpireIndex = len(list)
+	pool.ExpireBuckets[tx.ExpireBlock] = append(list, tx)
+}
 
-	if pool.heap != nil {
-		for i := range *pool.heap {
-			_ = i
-		}
-
-		*pool.heap = make(minTipHeap, 0, pool.maxSize)
+func (pool *PendingMemPool) removeExpireBucket(tx *PendingTx) {
+	list, ok := pool.ExpireBuckets[tx.ExpireBlock]
+	if !ok || len(list) == 0 {
+		return
 	}
-	heap.Init(pool.heap)
+
+	index := tx.ExpireIndex
+	if index < 0 || index >= len(list) {
+		return
+	}
+
+	if list[index].Hash != tx.Hash {
+		return
+	}
+
+	last := len(list) - 1
+
+	if index != last {
+		list[index] = list[last]
+		list[index].ExpireIndex = index
+	}
+
+	list = list[:last]
+
+	if len(list) == 0 {
+		delete(pool.ExpireBuckets, tx.ExpireBlock)
+	} else {
+		pool.ExpireBuckets[tx.ExpireBlock] = list
+	}
 }
 
 // 오래된 tx이거나 block에 포함된 tx는 mempool에서 제외
-func (pool *PendingMemPool) CollectAndClean(minedHashes map[string]struct{}) int {
+func (pool *PendingMemPool) RemoveByReceipts(receipts []*types.Receipt) int {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	initialCount := pool.heap.Len()
-	if initialCount == 0 {
-		return 0
-	}
-
-	expireTime := time.Now().Add(-pool.ttl)
-	oldHeap := *pool.heap
-
-	//  마이닝되지 않고 만료되지 않은 tx
-	survivedTxs := make([]PendingTxInfo, 0, len(oldHeap))
-	for _, tx := range oldHeap {
-		_, isMined := minedHashes[tx.Hash]
-
-		// 블록에 포함되지 않았고, TTL 만료도 되지 않은 트랜잭션만 후보군에 추가
-		if !isMined && tx.Timestamp.After(expireTime) {
-			survivedTxs = append(survivedTxs, tx)
+	removed_cnt := 0
+	for _, receipt := range receipts {
+		if pool.removeByHash(receipt.TxHash) {
+			removed_cnt++
 		}
 	}
 
-	//.  Min-Heap 구조 재정렬
-	*pool.heap = survivedTxs
-	heap.Init(pool.heap)
-
-	return initialCount - len(survivedTxs)
+	return removed_cnt
 }
 
-func (pool *PendingMemPool) Len() int {
-	pool.mu.RLock()
-	defer pool.mu.RUnlock()
-	return pool.heap.Len()
+func (pool *PendingMemPool) removeByHash(hash common.Hash) bool {
+	tx, ok := pool.HashIndex[hash]
+	if !ok {
+		return false
+	}
+
+	account, ok := pool.Accounts[tx.From]
+	if ok {
+		delete(account.NonceMap, tx.Nonce)
+		if len(account.NonceMap) == 0 {
+			delete(pool.Accounts, tx.From)
+		}
+	}
+
+	delete(pool.HashIndex, hash)
+
+	pool.removeExpireBucket(tx)
+
+	return true
 }
 
-func (pool *PendingMemPool) Snapshot() []PendingTxInfo {
+func (pool *PendingMemPool) RemoveExpired(curBlock uint64) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	for block, list := range pool.ExpireBuckets {
+		if block > curBlock {
+			continue
+		}
+		for _, tx := range list {
+			account := pool.Accounts[tx.From]
+			if account == nil {
+				continue
+			}
+
+			storedTx, ok := account.NonceMap[tx.Nonce]
+			if !ok || storedTx.Hash != tx.Hash {
+				continue
+			}
+			delete(account.NonceMap, tx.Nonce)
+
+			if len(account.NonceMap) == 0 {
+				delete(pool.Accounts, tx.From)
+			}
+
+			delete(pool.HashIndex, tx.Hash)
+		}
+
+		delete(pool.ExpireBuckets, block)
+	}
+}
+
+func (pool *PendingMemPool) Snapshot() []PendingTx {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
 
-	size := pool.heap.Len()
-	if size == 0 {
-		return nil
+	data := make([]PendingTx, 0, len(pool.HashIndex))
+	for _, tx := range pool.HashIndex {
+		data = append(data, *tx)
 	}
-
-	data := make([]PendingTxInfo, size)
-	copy(data, *pool.heap)
-
-	// big.Int 내부 값 포인터가 오염되지 않도록 Deep Copy
-	for i := 0; i < size; i++ {
-		if data[i].GasTipCap != nil {
-			data[i].GasTipCap = new(big.Int).Set(data[i].GasTipCap)
-		}
-		if data[i].GasFeeCap != nil {
-			data[i].GasFeeCap = new(big.Int).Set(data[i].GasFeeCap)
-		}
-	}
-
 	return data
 }

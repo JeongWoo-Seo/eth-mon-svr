@@ -4,30 +4,20 @@ import (
 	"math/big"
 )
 
-func (a *Analyzer) EffectiveTip(feeCap, tipCap, baseFee *big.Int) (uint64, bool) {
-	if feeCap == nil || tipCap == nil || baseFee == nil {
+func (a *Analyzer) EffectiveTip(feeCap, tipCap, baseFee uint64) (uint64, bool) {
+	// maxFeePerGas <= baseFee 이면 유효한 tip이 없음
+	if feeCap <= baseFee {
 		return 0, false
 	}
 
-	diff := new(big.Int).Sub(feeCap, baseFee)
-
-	if diff.Sign() <= 0 { //음수 처리
-		return 0, false
-	}
+	diff := feeCap - baseFee
 
 	// min(tipCap, diff)
-	var result *big.Int
-	if diff.Cmp(tipCap) > 0 {
-		result = tipCap
-	} else {
-		result = diff
+	if diff > tipCap {
+		return tipCap, true
 	}
 
-	if !result.IsUint64() { // uint64 범위를 넘는지 확인
-		return 0, false
-	}
-
-	return result.Uint64(), true
+	return diff, true
 }
 
 func (a *Analyzer) EffectiveTipFromReceipt(effectiveGasPrice, baseFee *big.Int) (uint64, bool) {

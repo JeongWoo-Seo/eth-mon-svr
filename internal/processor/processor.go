@@ -146,7 +146,7 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 
 		if len(validResults) > 0 {
 			report.IncTxFetched(uint64(len(validResults)))
-			p.pendingPool.PushBatch(validResults)
+			p.pendingPool.PushBatch(validResults, p.gasanalyzer.GetCurrentBlockNum())
 		}
 	}
 }
@@ -170,7 +170,8 @@ func (p *Process) ProcessBlock(header *types.Header) {
 			slog.String("block_hash", header.Hash().Hex()),
 		)
 
-		p.ClearMempool(ctx)
+		// retry queue 추가
+
 		return
 	}
 
