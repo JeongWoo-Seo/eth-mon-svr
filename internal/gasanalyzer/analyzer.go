@@ -63,14 +63,17 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	a.mu.RLock()
 	nextBlockNum := a.latestBlockData.BlockNumber + 1
 	nextBaseFee := a.latestBlockData.NextBaseFee
+	baseFee := a.latestBlockData.BaseFee
 	currentBaseFee := a.latestBlockData.BaseFee
+	gasLimit := a.latestBlockData.GasLimit
+	cutoff := a.latestBlockData.Cutoff
 	a.mu.RUnlock()
 
 	//pending tx weight 계산
-	pendingData := a.collectPendingTx(a.latestBlockData.NextBaseFee, a.latestBlockData.GasLimit)
+	pendingData := a.collectPendingTx(baseFee, nextBaseFee, gasLimit, cutoff)
 
 	//가중 백분위 계산
-	pendingResult := a.WeightedPercentiles(pendingData)
+	pendingResult, _ := a.WeightedPercentiles(pendingData)
 
 	//결과 업데이트
 	a.UpdateAnalPendingTxPredictionGasResult(pendingResult)
@@ -88,18 +91,34 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	)
 }
 
-func (a *Analyzer) collectPendingTx(nextBaseFee, blockGasLimit uint64) []WeightedTip {
+func (a *Analyzer) collectPendingTx(baseFee, nextBaseFee, blockGasLimit, cutoff uint64) []WeightedTip {
 	pendingData := a.pendingPool.Snapshot()
 	pool := make([]WeightedTip, 0, len(pendingData))
 
 	for _, tx := range pendingData {
+		//Next Block Fee Filtering(FeeCap >= nextBaseFee)
+		if tx.FeeCap <= nextBaseFee {
+			continue
+		}
+
+		//min(TipCap, FeeCap-nextBaseFee)
 		tip, ok := a.EffectiveTip(tx.FeeCap, tx.TipCap, nextBaseFee)
 		if !ok {
 			continue
 		}
 
-		weight := a.CalculateWeightForGasUsed(tx.GasLimit, blockGasLimit)
+		//하위 20 cutoff
+		if baseFee != 0 {
+			ratio := float64(nextBaseFee) / float64(baseFee)
+			dynamicCutoff := uint64(float64(cutoff) * ratio)
+			if tip < dynamicCutoff {
+				continue
+			}
+		}
 
+		//nonce 확인
+
+		weight := a.CalculateWeightForGasUsed(tx.GasLimit, blockGasLimit)
 		pool = append(pool, WeightedTip{
 			Tip:    tip,
 			Weight: weight,
@@ -109,7 +128,7 @@ func (a *Analyzer) collectPendingTx(nextBaseFee, blockGasLimit uint64) []Weighte
 	return pool
 }
 
-func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64 {
+func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) (map[string]uint64, uint64) {
 	if len(poolData) == 0 {
 		return defaultValue()
 	}
@@ -144,7 +163,8 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) map[string]uint64
 		result[target.Name] = calculateWeightedValue(percentiles, group)
 	}
 
-	return result
+	cutoff := percentiles[0]
+	return result, cutoff
 }
 
 func totalWeight(poolData []WeightedTip) float64 {
@@ -205,13 +225,13 @@ func calculateWeightedValue(values []uint64, group []WeightPoint) uint64 {
 	return uint64(sum / weight)
 }
 
-func defaultValue() map[string]uint64 {
+func defaultValue() (map[string]uint64, uint64) {
 	return map[string]uint64{
 		"low":    1_000_000_000, // Base + 1 Gwei
 		"market": 1_500_000_000, // Base + 1.5 Gwei
 		"fast":   2_000_000_000, // Base + 2 Gwei
 		"urgent": 5_000_000_000, // Base + 5 Gwei
-	}
+	}, 1_000_000
 }
 
 func (a *Analyzer) UpdateResult(nextBlockNum, currentBaseFee, nextBaseFee uint64) *GasPrediction {
@@ -284,7 +304,7 @@ func (a *Analyzer) GetPrediction() GasPrediction {
 	return a.latestResult
 }
 
-func (a *Analyzer) UpdateLatestBlockData(blockNumber, baseFee, gasUsed, gasLimit, nextBaseFee uint64) {
+func (a *Analyzer) UpdateLatestBlockData(blockNumber, baseFee, gasUsed, gasLimit, nextBaseFee, cutoff uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -295,6 +315,7 @@ func (a *Analyzer) UpdateLatestBlockData(blockNumber, baseFee, gasUsed, gasLimit
 		GasUsed:     gasUsed,
 		GasLimit:    gasLimit,
 		UpdatedAt:   time.Now(),
+		Cutoff:      cutoff,
 	}
 }
 

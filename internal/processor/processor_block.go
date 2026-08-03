@@ -182,7 +182,7 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 		}
 	}
 
-	blockResult := p.gasanalyzer.WeightedPercentiles(pool)
+	blockResult, cutoff := p.gasanalyzer.WeightedPercentiles(pool)
 
 	// 가스 분석을 위한 블록 정보 업데이트
 	p.gasanalyzer.UpdateLatestBlockData(
@@ -191,6 +191,7 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 		header.GasUsed,
 		header.GasLimit,
 		nextBaseFee.Uint64(),
+		cutoff,
 	)
 	p.gasanalyzer.UpdateAnalBlockTxPredictionGasResult(blockResult)
 }

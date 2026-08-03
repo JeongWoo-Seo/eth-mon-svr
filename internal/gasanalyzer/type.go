@@ -27,6 +27,7 @@ var GasPredictionTargets = []TargetPercentile{
 }
 
 var GasAnalysisTargets = []float64{
+	0.20,
 	0.40,
 	0.45,
 	0.50,
@@ -42,7 +43,8 @@ var GasAnalysisTargets = []float64{
 }
 
 const (
-	P40 = iota
+	P20 = iota
+	P40
 	P45
 	P50
 	P55
@@ -124,6 +126,7 @@ type BlockAnalysisData struct {
 	NextBaseFee uint64
 	GasUsed     uint64
 	GasLimit    uint64
+	Cutoff      uint64
 	TipPool     []WeightedTip
 	UpdatedAt   time.Time
 }
