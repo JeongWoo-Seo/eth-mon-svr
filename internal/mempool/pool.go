@@ -3,6 +3,7 @@ package mempool
 import (
 	"fmt"
 	"math/big"
+	"sort"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -220,13 +221,43 @@ func (pool *PendingMemPool) RemoveExpired(curBlock uint64) {
 	}
 }
 
+// pending tx 데이터를 넘길때 nonce gap 여부를 확인후 넘김
 func (pool *PendingMemPool) Snapshot() []PendingTx {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
 
 	data := make([]PendingTx, 0, len(pool.HashIndex))
-	for _, tx := range pool.HashIndex {
-		data = append(data, *tx)
+
+	for _, account := range pool.Accounts {
+		nonces := make([]uint64, 0, len(account.NonceMap))
+		for nonce := range account.NonceMap {
+			nonces = append(nonces, nonce)
+		}
+
+		if len(nonces) == 0 {
+			continue
+		}
+
+		sort.Slice(nonces, func(i, j int) bool {
+			return nonces[i] < nonces[j]
+		})
+
+		expected := nonces[0]
+		hasGap := false
+
+		for _, nonce := range nonces {
+			if nonce != expected {
+				hasGap = true
+			}
+
+			tx := *account.NonceMap[nonce]
+			tx.NonceGap = hasGap
+
+			data = append(data, tx)
+
+			expected = nonce + 1
+		}
 	}
+
 	return data
 }

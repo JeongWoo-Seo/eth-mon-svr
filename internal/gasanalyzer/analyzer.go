@@ -69,6 +69,13 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	cutoff := a.latestBlockData.Cutoff
 	a.mu.RUnlock()
 
+	if nextBlockNum == 1 {
+		logger.Warn(context.Background(), "not yet ready to analyze",
+			slog.String("system", "analysis"),
+		)
+		return
+	}
+
 	//pending tx weight 계산
 	pendingData := a.collectPendingTx(baseFee, nextBaseFee, gasLimit, cutoff)
 
@@ -97,7 +104,7 @@ func (a *Analyzer) collectPendingTx(baseFee, nextBaseFee, blockGasLimit, cutoff 
 
 	for _, tx := range pendingData {
 		//Next Block Fee Filtering(FeeCap >= nextBaseFee)
-		if tx.FeeCap <= nextBaseFee {
+		if tx.FeeCap < nextBaseFee {
 			continue
 		}
 
@@ -107,18 +114,30 @@ func (a *Analyzer) collectPendingTx(baseFee, nextBaseFee, blockGasLimit, cutoff 
 			continue
 		}
 
-		//하위 20 cutoff
-		if baseFee != 0 {
-			ratio := float64(nextBaseFee) / float64(baseFee)
-			dynamicCutoff := uint64(float64(cutoff) * ratio)
-			if tip < dynamicCutoff {
-				continue
-			}
-		}
-
-		//nonce 확인
+		// //하위 20 cutoff
+		// if baseFee != 0 {
+		// 	ratio := float64(nextBaseFee) / float64(baseFee)
+		// 	if ratio > 1.2 {
+		// 		ratio = 1.2
+		// 	}
+		// 	if ratio < 1.0 {
+		// 		ratio = 1.0
+		// 	}
+		// 	dynamicCutoff := uint64(float64(cutoff) * ratio)
+		// 	if tip < dynamicCutoff {
+		// 		logger.Warn(context.Background(), "cut dynamicCutoff",
+		// 			slog.String("system", "test"))
+		// 		continue
+		// 	}
+		// }
 
 		weight := a.CalculateWeightForGasUsed(tx.GasLimit, blockGasLimit)
+		//nonce gap 이면 weight를 0.5 비율로
+		if tx.NonceGap {
+			weight *= 0.5
+			logger.Warn(context.Background(), "NonceGap",
+				slog.String("system", "test"))
+		}
 		pool = append(pool, WeightedTip{
 			Tip:    tip,
 			Weight: weight,
@@ -130,6 +149,8 @@ func (a *Analyzer) collectPendingTx(baseFee, nextBaseFee, blockGasLimit, cutoff 
 
 func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) (map[string]uint64, uint64) {
 	if len(poolData) == 0 {
+		logger.Warn(context.Background(), " WeightedPercentiles default value - poolData =0",
+			slog.String("sysyem", "analysis"))
 		return defaultValue()
 	}
 
@@ -139,11 +160,12 @@ func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) (map[string]uint6
 			return cmp.Compare(a.Tip, b.Tip)
 		},
 	)
-
 	// 전체 weight 계산
 	totalWeight := totalWeight(poolData)
 
 	if totalWeight == 0 {
+		logger.Warn(context.Background(), "WeightedPercentiles default value - totalWeight =0",
+			slog.String("sysyem", "analysis"))
 		return defaultValue()
 	}
 
@@ -227,10 +249,10 @@ func calculateWeightedValue(values []uint64, group []WeightPoint) uint64 {
 
 func defaultValue() (map[string]uint64, uint64) {
 	return map[string]uint64{
-		"low":    1_000_000_000, // Base + 1 Gwei
-		"market": 1_500_000_000, // Base + 1.5 Gwei
-		"fast":   2_000_000_000, // Base + 2 Gwei
-		"urgent": 5_000_000_000, // Base + 5 Gwei
+		"low":    500_000_000,   // Base + 1 Gwei
+		"market": 750_000_000,   // Base + 1.5 Gwei
+		"fast":   1_000_000_000, // Base + 2 Gwei
+		"urgent": 1_500_000_000, // Base + 5 Gwei
 	}, 1_000_000
 }
 

@@ -90,9 +90,9 @@ var PredictionGroups = map[string][]WeightPoint{
 
 	"p90": {
 		//{Index: P80, Weight: 1},
-		{Index: P85, Weight: 2},
-		{Index: P90, Weight: 5},
-		{Index: P95, Weight: 2},
+		{Index: P85, Weight: 1},
+		{Index: P90, Weight: 4},
+		{Index: P95, Weight: 1},
 	},
 }
 

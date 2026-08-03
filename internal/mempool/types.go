@@ -16,6 +16,7 @@ type PendingTx struct {
 
 	// ExpireIndex에서 O(1) 삭제를 위해 저장
 	ExpireIndex int
+	NonceGap    bool
 }
 
 type AccountPending struct {
