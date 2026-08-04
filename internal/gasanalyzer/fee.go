@@ -1,6 +1,7 @@
 package gasanalyzer
 
 import (
+	"math"
 	"math/big"
 )
 
@@ -90,7 +91,8 @@ func (a *Analyzer) CalculateWeightForGasUsed(gasUsed, gasLimit uint64) float64 {
 		return 0
 	}
 
-	//return math.Sqrt(float64(gasUsed) / float64(gasLimit))
+	return math.Sqrt(float64(gasUsed) / float64(gasLimit))
 	//return math.Log(float64(gasUsed))
-	return float64(gasUsed)
+	//return float64(gasUsed)
+	//return math.Sqrt(float64(gasUsed))
 }

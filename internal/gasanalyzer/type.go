@@ -82,16 +82,16 @@ var PredictionGroups = map[string][]WeightPoint{
 
 	"p75": {
 		{Index: P65, Weight: 1},
-		{Index: P70, Weight: 4},
+		{Index: P70, Weight: 5},
 		{Index: P75, Weight: 10},
-		{Index: P80, Weight: 4},
+		{Index: P80, Weight: 5},
 		{Index: P85, Weight: 1},
 	},
 
 	"p90": {
 		//{Index: P80, Weight: 1},
 		{Index: P85, Weight: 1},
-		{Index: P90, Weight: 4},
+		{Index: P90, Weight: 3},
 		{Index: P95, Weight: 1},
 	},
 }
@@ -129,4 +129,9 @@ type BlockAnalysisData struct {
 	Cutoff      uint64
 	TipPool     []WeightedTip
 	UpdatedAt   time.Time
+}
+
+type OuterInfo struct {
+	Count      int
+	UpperBound uint64
 }

@@ -80,7 +80,7 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	pendingData := a.collectPendingTx(baseFee, nextBaseFee, gasLimit, cutoff)
 
 	//가중 백분위 계산
-	pendingResult, _ := a.WeightedPercentiles(pendingData)
+	pendingResult := a.PendingPercentiles(pendingData)
 
 	//결과 업데이트
 	a.UpdateAnalPendingTxPredictionGasResult(pendingResult)
@@ -125,18 +125,16 @@ func (a *Analyzer) collectPendingTx(baseFee, nextBaseFee, blockGasLimit, cutoff 
 		// 	}
 		// 	dynamicCutoff := uint64(float64(cutoff) * ratio)
 		// 	if tip < dynamicCutoff {
-		// 		logger.Warn(context.Background(), "cut dynamicCutoff",
-		// 			slog.String("system", "test"))
 		// 		continue
 		// 	}
 		// }
+
+		//outer cap -  outer 이상의 tip 값을 outer 값으로 치환
 
 		weight := a.CalculateWeightForGasUsed(tx.GasLimit, blockGasLimit)
 		//nonce gap 이면 weight를 0.5 비율로
 		if tx.NonceGap {
 			weight *= 0.5
-			logger.Warn(context.Background(), "NonceGap",
-				slog.String("system", "test"))
 		}
 		pool = append(pool, WeightedTip{
 			Tip:    tip,
@@ -147,113 +145,59 @@ func (a *Analyzer) collectPendingTx(baseFee, nextBaseFee, blockGasLimit, cutoff 
 	return pool
 }
 
-func (a *Analyzer) WeightedPercentiles(poolData []WeightedTip) (map[string]uint64, uint64) {
+func (a *Analyzer) PendingPercentiles(poolData []WeightedTip) map[string]uint64 {
 	if len(poolData) == 0 {
-		logger.Warn(context.Background(), " WeightedPercentiles default value - poolData =0",
+		result, _ := defaultValue()
+		logger.Warn(context.Background(), " WeightedPercentiles default value: poolData =0",
+			slog.String("sysyem", "analysis"))
+		return result
+	}
+
+	// Tip 오름차순 정렬
+	slices.SortFunc(poolData, func(a, b WeightedTip) int {
+		return cmp.Compare(a.Tip, b.Tip)
+	})
+
+	// 최대 Tip 확인
+	logger.Warn(
+		context.Background(),
+		"pending tip statistics",
+		slog.String("system", "test"),
+		slog.Int("txCount", len(poolData)),
+		slog.Uint64("maxTip", poolData[len(poolData)-1].Tip),
+	)
+	//outer 계산
+	outer := calculateOuterBound(poolData)
+
+	if outer.Count > 0 {
+		start := len(poolData) - outer.Count
+
+		for i := start; i < len(poolData); i++ {
+			poolData[i].Tip = outer.UpperBound
+		}
+	}
+
+	percentiles := calculateWeightedPercentiles(poolData)
+
+	return buildPrediction(percentiles)
+}
+
+func (a *Analyzer) BlockPercentiles(poolData []WeightedTip) (map[string]uint64, uint64) {
+	if len(poolData) == 0 {
+		logger.Warn(context.Background(), " WeightedPercentiles default value: poolData =0",
 			slog.String("sysyem", "analysis"))
 		return defaultValue()
 	}
 
 	// Tip 오름차순 정렬
-	slices.SortFunc(poolData,
-		func(a, b WeightedTip) int {
-			return cmp.Compare(a.Tip, b.Tip)
-		},
-	)
-	// 전체 weight 계산
-	totalWeight := totalWeight(poolData)
+	slices.SortFunc(poolData, func(a, b WeightedTip) int {
+		return cmp.Compare(a.Tip, b.Tip)
+	})
 
-	if totalWeight == 0 {
-		logger.Warn(context.Background(), "WeightedPercentiles default value - totalWeight =0",
-			slog.String("sysyem", "analysis"))
-		return defaultValue()
-	}
+	percentiles := calculateWeightedPercentiles(poolData)
+	result := buildPrediction(percentiles)
 
-	// P40 ~ P95 계산
-	percentiles := a.calculatePercentiles(poolData, totalWeight)
-	result := make(map[string]uint64, len(GasPredictionTargets))
-
-	for _, target := range GasPredictionTargets {
-		group := PredictionGroups[target.GroupKey]
-
-		// 그룹 없는 경우
-		if len(group) == 0 {
-			result[target.Name] = percentiles[target.Index]
-			continue
-		}
-
-		result[target.Name] = calculateWeightedValue(percentiles, group)
-	}
-
-	cutoff := percentiles[0]
-	return result, cutoff
-}
-
-func totalWeight(poolData []WeightedTip) float64 {
-	var total float64
-	for _, tx := range poolData {
-		total += tx.Weight
-	}
-
-	return total
-}
-
-func (a *Analyzer) calculatePercentiles(poolData []WeightedTip, totalWeight float64) []uint64 {
-	results := make([]uint64, len(GasAnalysisTargets))
-
-	var cumulative float64
-	index := 0
-
-	for _, tx := range poolData {
-		cumulative += tx.Weight
-		for index < len(GasAnalysisTargets) && cumulative >= GasAnalysisTargets[index]*totalWeight {
-			results[index] = tx.Tip
-			index++
-		}
-
-		if index >= len(results) {
-			break
-		}
-	}
-
-	// 부족한 percentile은 마지막 값 사용
-	lastTip := poolData[len(poolData)-1].Tip
-	for index < len(results) {
-		results[index] = lastTip
-		index++
-	}
-
-	return results
-}
-
-func calculateWeightedValue(values []uint64, group []WeightPoint) uint64 {
-	var sum float64
-	var weight float64
-
-	for _, wp := range group {
-		//0 <= index <= len(values) 범위를 넘는 것을 방지하기 위해
-		if wp.Index < 0 || wp.Index >= len(values) {
-			continue
-		}
-
-		sum += float64(values[wp.Index]) * wp.Weight
-		weight += wp.Weight
-	}
-
-	if weight == 0 {
-		return 0
-	}
-
-	return uint64(sum / weight)
-}
-
-func defaultValue() (map[string]uint64, uint64) {
-	return map[string]uint64{
-		"low":    500_000_000,   // Base + 1 Gwei
-		"market": 750_000_000,   // Base + 1.5 Gwei
-		"fast":   1_000_000_000, // Base + 2 Gwei
-		"urgent": 1_500_000_000, // Base + 5 Gwei
-	}, 1_000_000
+	return result, percentiles[P20]
 }
 
 func (a *Analyzer) UpdateResult(nextBlockNum, currentBaseFee, nextBaseFee uint64) *GasPrediction {
@@ -269,8 +213,8 @@ func (a *Analyzer) UpdateResult(nextBlockNum, currentBaseFee, nextBaseFee uint64
 	// BaseFee 변화 추세를 기반 가중치
 	const sensitivity = 0.6
 	multiplier := 1.0
-	// current := currentBaseFee.Int64()
-	// next := nextBaseFee.Int64()
+	// current := currentBaseFee
+	// next := nextBaseFee
 	// rate := float64(next-current) / float64(current)
 	// multiplier = 1.0 + (rate * sensitivity)
 
