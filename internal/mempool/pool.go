@@ -190,9 +190,11 @@ func (pool *PendingMemPool) removeByHash(hash common.Hash) bool {
 	return true
 }
 
-func (pool *PendingMemPool) RemoveExpired(curBlock uint64) {
+func (pool *PendingMemPool) RemoveExpired(curBlock uint64) int {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
+
+	var removed_cnt int
 
 	for block, list := range pool.ExpireBuckets {
 		if block > curBlock {
@@ -215,10 +217,13 @@ func (pool *PendingMemPool) RemoveExpired(curBlock uint64) {
 			}
 
 			delete(pool.HashIndex, tx.Hash)
+			removed_cnt++
 		}
 
 		delete(pool.ExpireBuckets, block)
 	}
+
+	return removed_cnt
 }
 
 // pending tx 데이터를 넘길때 nonce gap 여부를 확인후 넘김

@@ -195,3 +195,13 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 	)
 	p.gasanalyzer.UpdateAnalBlockTxPredictionGasResult(blockResult)
 }
+
+func (p *Process) removeExpired(blockNum uint64) {
+	removedCnt := p.pendingPool.RemoveExpired(blockNum)
+	if removedCnt > 0 {
+		logger.Info(context.Background(), "remove old txs from mempool",
+			slog.Uint64("block_number", blockNum),
+			slog.Int("removed_count", removedCnt),
+		)
+	}
+}

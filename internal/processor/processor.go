@@ -31,6 +31,7 @@ type Process struct {
 	alcEthClient *ethclient.Client
 	infEthClient *ethclient.Client
 	gasanalyzer  *gasanalyzer.Analyzer
+	blockTime    *blockstore.BlockTimeStore
 
 	limiter *rate.Limiter
 
@@ -40,13 +41,14 @@ type Process struct {
 }
 
 func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, alcClient *ethclient.Client, infClient *ethclient.Client,
-	gasanalyzer *gasanalyzer.Analyzer) *Process {
+	gasanalyzer *gasanalyzer.Analyzer, blockTime *blockstore.BlockTimeStore) *Process {
 	return &Process{
 		pendingPool:  pendingPool,
 		blockstore:   blockstore,
 		alcEthClient: alcClient,
 		infEthClient: infClient,
 		gasanalyzer:  gasanalyzer,
+		blockTime:    blockTime,
 
 		limiter: rate.NewLimiter(rate.Limit(400), 500),
 
@@ -154,6 +156,21 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 func (p *Process) ProcessBlock(header *types.Header) {
 	ctx := context.Background()
 
+	if header == nil {
+		logger.Warn(ctx, "Received nil block header",
+			slog.String("system", "ethereum"),
+		)
+		return
+	}
+
+	if header.Number == nil {
+		logger.Warn(ctx, "Received block header with nil number",
+			slog.String("system", "ethereum"),
+			slog.String("block_hash", header.Hash().Hex()),
+		)
+		return
+	}
+
 	// 이전 블록 결과 분석
 	p.CompareFeeHistory(ctx)
 
@@ -182,9 +199,14 @@ func (p *Process) ProcessBlock(header *types.Header) {
 	// 블록 데이터 가공
 	blockData := p.CalculateBlockTxTip(header, receipts)
 
-	//데이터 저장
+	//block pool에 저장
 	p.blockstore.AddBlock(blockData)
+
+	// 블록에 포함된 tx 삭제
 	p.ClearMempoolToTx(ctx, header, receipts)
+
+	// 오래된 tx 삭제
+	p.removeExpired(header.Number.Uint64())
 
 	// 분석을 위한 블록 및 tx 정보 업데이트 //각 block에 대한 결과값 계산
 	p.UpdateBlockInfoForAnalysis(header)

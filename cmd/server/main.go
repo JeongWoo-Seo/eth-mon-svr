@@ -80,7 +80,7 @@ func main() {
 	//////////////////////////
 	// set mempool pending and block
 	//////////////////////////
-	pendingPool, poolErr := mempool.NewPendingMemPool(cfg.EthSepoliaChainId, 20)
+	pendingPool, poolErr := mempool.NewPendingMemPool(cfg.EthSepoliaChainId, cfg.TxStoreBlockTTL)
 	if poolErr != nil {
 		logger.Error(ctx, "failed to initialize pending pool",
 			err,
@@ -88,7 +88,7 @@ func main() {
 		panic(err)
 	}
 
-	dedup, err := mempool.NewCache(10000, 2*time.Minute)
+	dedup, err := mempool.NewCache(10000, 4*time.Minute)
 	if err != nil {
 		logger.Error(ctx, "failed to initialize mempool cache",
 			err,
@@ -96,13 +96,14 @@ func main() {
 		panic(err)
 	}
 
-	blockstore := blockstore.NewBlockStore(cfg.MaxBlockCount)
+	blockPool := blockstore.NewBlockStore(cfg.MaxBlockCount)
+	blockTime := blockstore.NewBlockTimeStore(cfg.TxStoreBlockTTL + 2)
 
 	//////////////////////////
 	// start processor
 	//////////////////////////
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, grpcClient)
-	proc := processor.NewProcess(pendingPool, blockstore, alcEthClient.EthClient, infEthClient.EthClient, analyzer)
+	proc := processor.NewProcess(pendingPool, blockPool, alcEthClient.EthClient, infEthClient.EthClient, analyzer, blockTime)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)
 
