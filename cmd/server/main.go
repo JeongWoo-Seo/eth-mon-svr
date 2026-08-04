@@ -97,18 +97,24 @@ func main() {
 	}
 
 	blockPool := blockstore.NewBlockStore(cfg.MaxBlockCount)
-	blockTime := blockstore.NewBlockTimeStore(cfg.TxStoreBlockTTL + 2)
 
 	//////////////////////////
 	// start processor
 	//////////////////////////
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, grpcClient)
-	proc := processor.NewProcess(pendingPool, blockPool, alcEthClient.EthClient, infEthClient.EthClient, analyzer, blockTime)
+	proc := processor.NewProcess(pendingPool, blockPool, alcEthClient.EthClient, infEthClient.EthClient, analyzer)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)
 
 	blockWorker := worker.NewBlockWorker(proc)
 	blockWorker.Start(ctx)
+
+	if err := proc.Initialize(ctx); err != nil {
+		logger.Error(ctx, "failed to initialize block info",
+			err,
+			slog.String("system", "process"))
+		panic(err)
+	}
 
 	report.StartReporter(ctx)
 

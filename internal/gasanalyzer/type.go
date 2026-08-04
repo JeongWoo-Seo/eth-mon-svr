@@ -122,6 +122,7 @@ type GasPrediction struct {
 
 type BlockAnalysisData struct {
 	BlockNumber uint64
+	BlockTime   uint64
 	BaseFee     uint64
 	NextBaseFee uint64
 	GasUsed     uint64

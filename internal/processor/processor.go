@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -31,7 +32,6 @@ type Process struct {
 	alcEthClient *ethclient.Client
 	infEthClient *ethclient.Client
 	gasanalyzer  *gasanalyzer.Analyzer
-	blockTime    *blockstore.BlockTimeStore
 
 	limiter *rate.Limiter
 
@@ -41,14 +41,13 @@ type Process struct {
 }
 
 func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, alcClient *ethclient.Client, infClient *ethclient.Client,
-	gasanalyzer *gasanalyzer.Analyzer, blockTime *blockstore.BlockTimeStore) *Process {
+	gasanalyzer *gasanalyzer.Analyzer) *Process {
 	return &Process{
 		pendingPool:  pendingPool,
 		blockstore:   blockstore,
 		alcEthClient: alcClient,
 		infEthClient: infClient,
 		gasanalyzer:  gasanalyzer,
-		blockTime:    blockTime,
 
 		limiter: rate.NewLimiter(rate.Limit(400), 500),
 
@@ -148,7 +147,8 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 
 		if len(validResults) > 0 {
 			report.IncTxFetched(uint64(len(validResults)))
-			p.pendingPool.PushBatch(validResults, p.gasanalyzer.GetCurrentBlockNum())
+			blockNum, blockTime := p.gasanalyzer.GetCurrentBlockNumAndTime()
+			p.pendingPool.PushBatch(validResults, blockNum, blockTime)
 		}
 	}
 }
@@ -210,4 +210,45 @@ func (p *Process) ProcessBlock(header *types.Header) {
 
 	// 분석을 위한 블록 및 tx 정보 업데이트 //각 block에 대한 결과값 계산
 	p.UpdateBlockInfoForAnalysis(header)
+}
+
+func (p *Process) Initialize(ctx context.Context) error {
+	// 최신 블록 조회
+	header, err := p.alcEthClient.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get latest block number: %w", err)
+	}
+
+	if header == nil {
+		return fmt.Errorf("Received nil block header")
+	}
+
+	if header.Number == nil {
+		return fmt.Errorf("Received block header with nil number")
+	}
+
+	// receipt 조회
+	receipt, err := p.fetchBlockReceipts(ctx, header.Hash().Hex())
+	if err != nil {
+		return fmt.Errorf("failed to fetch receipt: %w", err)
+	}
+
+	if len(receipt) == 0 {
+		return fmt.Errorf("latest block has no receipts")
+	}
+
+	//block 데이터 생성
+	blockData := p.CalculateBlockTxTip(header, receipt)
+
+	// blockstore 저장
+	p.blockstore.AddBlock(blockData)
+
+	//분석을 위한 데이터 초기화
+	p.UpdateBlockInfoForAnalysis(header)
+
+	logger.Info(ctx, "Initialization completed",
+		slog.String("system", "ethereum"),
+		slog.Uint64("block_number", header.Number.Uint64()),
+	)
+	return nil
 }

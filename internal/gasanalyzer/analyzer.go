@@ -13,6 +13,7 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
+	"github.com/ethereum/go-ethereum/core/types"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -270,16 +271,17 @@ func (a *Analyzer) GetPrediction() GasPrediction {
 	return a.latestResult
 }
 
-func (a *Analyzer) UpdateLatestBlockData(blockNumber, baseFee, gasUsed, gasLimit, nextBaseFee, cutoff uint64) {
+func (a *Analyzer) UpdateLatestBlockData(header *types.Header, nextBaseFee, cutoff uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	a.latestBlockData = BlockAnalysisData{
-		BlockNumber: blockNumber,
-		BaseFee:     baseFee,
+		BlockNumber: header.Number.Uint64(),
+		BlockTime:   header.Time,
+		BaseFee:     header.BaseFee.Uint64(),
 		NextBaseFee: nextBaseFee,
-		GasUsed:     gasUsed,
-		GasLimit:    gasLimit,
+		GasUsed:     header.GasUsed,
+		GasLimit:    header.GasLimit,
 		UpdatedAt:   time.Now(),
 		Cutoff:      cutoff,
 	}
@@ -315,9 +317,9 @@ func (a *Analyzer) UpdateAnalPendingTxPredictionGasResult(result map[string]uint
 	}
 }
 
-func (a *Analyzer) GetCurrentBlockNum() uint64 {
+func (a *Analyzer) GetCurrentBlockNumAndTime() (uint64, uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	return a.latestBlockData.BlockNumber
+	return a.latestBlockData.BlockNumber, a.latestBlockData.BlockTime
 }

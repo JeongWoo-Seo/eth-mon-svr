@@ -34,7 +34,7 @@ func NewPendingMemPool(chainID string, ttlblock uint64) (*PendingMemPool, error)
 	}, nil
 }
 
-func (pool *PendingMemPool) PushBatch(txs []*types.Transaction, currentBlock uint64) {
+func (pool *PendingMemPool) PushBatch(txs []*types.Transaction, currentBlockNum, curBlockTime uint64) {
 	if len(txs) == 0 {
 		return
 	}
@@ -72,15 +72,16 @@ func (pool *PendingMemPool) PushBatch(txs []*types.Transaction, currentBlock uin
 		}
 
 		validTx = append(validTx, &PendingTx{
-			Hash:        tx.Hash(),
-			From:        from,
-			Nonce:       tx.Nonce(),
-			FeeCap:      feeCap.Uint64(),
-			TipCap:      tipCap.Uint64(),
-			GasLimit:    tx.Gas(),
-			SeenBlock:   currentBlock,
-			ExpireBlock: currentBlock + pool.TTLBlock,
-			ExpireIndex: -1,
+			Hash:          tx.Hash(),
+			From:          from,
+			Nonce:         tx.Nonce(),
+			FeeCap:        feeCap.Uint64(),
+			TipCap:        tipCap.Uint64(),
+			GasLimit:      tx.Gas(),
+			SeenBlock:     currentBlockNum,
+			SeenBlockTime: curBlockTime,
+			ExpireBlock:   currentBlockNum + pool.TTLBlock,
+			ExpireIndex:   -1,
 		})
 	}
 
@@ -154,7 +155,7 @@ func (pool *PendingMemPool) removeExpireBucket(tx *PendingTx) {
 	}
 }
 
-// 오래된 tx이거나 block에 포함된 tx는 mempool에서 제외
+// block에 포함된 tx는 mempool에서 제외
 func (pool *PendingMemPool) RemoveByReceipts(receipts []*types.Receipt) int {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
@@ -194,7 +195,7 @@ func (pool *PendingMemPool) RemoveExpired(curBlock uint64) int {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	var removed_cnt int
+	removed_cnt := 0
 
 	for block, list := range pool.ExpireBuckets {
 		if block > curBlock {

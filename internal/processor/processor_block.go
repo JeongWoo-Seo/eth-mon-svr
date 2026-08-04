@@ -159,7 +159,6 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 		return
 	}
 
-	currentBlockNumber := header.Number.Uint64()
 	nextBaseFee := p.gasanalyzer.CalculateNextBaseFee(header.BaseFee, header.GasUsed, header.GasLimit)
 	blockData := p.blockstore.GetBlockData()
 
@@ -186,10 +185,7 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 
 	// 가스 분석을 위한 블록 정보 업데이트
 	p.gasanalyzer.UpdateLatestBlockData(
-		currentBlockNumber,
-		header.BaseFee.Uint64(),
-		header.GasUsed,
-		header.GasLimit,
+		header,
 		nextBaseFee.Uint64(),
 		cutoff,
 	)
