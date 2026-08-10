@@ -3,7 +3,6 @@ package grpcClient
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"time"
 
@@ -13,10 +12,18 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+const (
+	gasPredictionBufferSize = 300
+	feeBucketBufferSize     = 1
+	streamReconnectDelay    = 2 * time.Second
+	unaryRetryDelay         = 2 * time.Second
+)
+
 type GasPredictionClient struct {
-	client pb.GasPredictionServiceClient
-	conn   *grpc.ClientConn
-	ch     chan *pb.GasPredictionRequest
+	client       pb.GasPredictionServiceClient
+	conn         *grpc.ClientConn
+	GasPredictCh chan *pb.GasPredictionRequest
+	FeeBucketCh  chan *pb.FeeStatisticsRequest
 }
 
 func NewGasPredictClient(ctx context.Context, addr string) (*GasPredictionClient, func(), error) {
@@ -26,70 +33,80 @@ func NewGasPredictClient(ctx context.Context, addr string) (*GasPredictionClient
 	}
 
 	c := &GasPredictionClient{
-		client: pb.NewGasPredictionServiceClient(cc),
-		conn:   cc,
-		ch:     make(chan *pb.GasPredictionRequest, 300),
+		client:       pb.NewGasPredictionServiceClient(cc),
+		conn:         cc,
+		GasPredictCh: make(chan *pb.GasPredictionRequest, gasPredictionBufferSize),
+		FeeBucketCh:  make(chan *pb.FeeStatisticsRequest, feeBucketBufferSize),
 	}
+
+	grpcCtx, cancel := context.WithCancel(ctx)
 
 	//stream worker
-	go c.startStreamWorker(ctx)
+	go c.startStreamWorker(grpcCtx)
 
-	close := func() {
-		cc.Close()
+	//unary worker
+	go c.startUnaryWoker(grpcCtx)
+
+	closeClient := func() {
+		//worker 종료
+		cancel()
+
+		if err := cc.Close(); err != nil {
+			logger.Error(context.Background(), "failed to close grpc connection",
+				err,
+				slog.String("system", "grpc client"))
+		}
 	}
 
-	return c, close, nil
+	return c, closeClient, nil
 }
+
+//stream
 
 func (c *GasPredictionClient) startStreamWorker(ctx context.Context) {
 	for {
-		select {
-		case <-ctx.Done():
+		// ctx 종료 신호
+		if ctx.Err() != nil {
 			logger.Info(ctx, "stop stream worker",
 				slog.String("system", "grpc client"))
+
 			return
-		default:
 		}
 
 		stream, err := c.client.UploadGasPredictions(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+
 			logger.Error(ctx, "failed to connect stream",
 				err,
 				slog.String("system", "grpc client"))
 
-			select {
-			//재연결 시도전 2초 대기
-			case <-time.After(2 * time.Second):
-				continue
-			case <-ctx.Done():
+			//reconnect and retry delay
+			if !WaitForRetry(ctx, streamReconnectDelay) {
 				return
 			}
+
+			continue
 		}
 
 		logger.Info(ctx, "stream connected successfully",
 			slog.String("system", "grpc client"))
 
 		streamErr := c.processStream(ctx, stream)
-		if streamErr != nil {
-			logger.Warn(ctx, "stream disconnected",
-				slog.String("system", "grpc client"),
-				slog.Any("err", streamErr))
-		} else {
-			res, closeErr := stream.CloseAndRecv()
-			if closeErr != nil && closeErr != io.EOF {
-				logger.Error(ctx, "failed to close stream gracefully",
-					closeErr,
-					slog.String("system", "grpc client"))
-			} else if res != nil {
-				logger.Info(ctx, "stream closed by server response",
-					slog.String("system", "grpc client"),
-					slog.String("message", res.GetMessage()))
-			}
-			return // 워커 고루틴 완전히 종료
+		//ctx 종료 시
+		if ctx.Err() != nil {
+			return
 		}
 
-		// 에러로 인한 재연결 전 짧은 대기
-		time.Sleep(1 * time.Second)
+		logger.Warn(ctx, "stream disconnected, reconnecting",
+			slog.String("system", "grpc client"),
+			slog.Any("err", streamErr))
+
+		if !WaitForRetry(ctx, streamReconnectDelay) {
+			return
+		}
 	}
 }
 
@@ -99,12 +116,7 @@ func (c *GasPredictionClient) processStream(ctx context.Context, stream pb.GasPr
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case req, ok := <-c.ch:
-			if !ok {
-				// c.ch 채널이 close
-				return nil
-			}
-
+		case req := <-c.GasPredictCh:
 			//스트림 메시지 전송
 			if err := stream.Send(req); err != nil {
 				logger.Error(ctx, "failed to send gas prediction via stream",
@@ -116,12 +128,95 @@ func (c *GasPredictionClient) processStream(ctx context.Context, stream pb.GasPr
 	}
 }
 
-func (c *GasPredictionClient) ResultSend(req *pb.GasPredictionRequest) {
+func (c *GasPredictionClient) GasPredictResultSend(req *pb.GasPredictionRequest) {
 	select {
-	case c.ch <- req:
+	case c.GasPredictCh <- req:
+		return
+
 	// 버퍼가 가득찰 경우
 	default:
-		logger.Warn(context.Background(), "send channel full and dropp the data",
+		logger.Warn(context.Background(), "send channel full and GasPredictionRequest dropp the data",
 			slog.String("system", "grpc client"))
+	}
+}
+
+//Unary
+
+func (c *GasPredictionClient) startUnaryWoker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info(ctx, "stop unary worker",
+				slog.String("system", "grpc client"))
+			return
+
+		case req, ok := <-c.FeeBucketCh:
+			if !ok {
+				logger.Info(ctx, "fee bucket channel closed",
+					slog.String("system", "grpc client"))
+				return
+			}
+
+			c.sendFeeBucket(ctx, req)
+		}
+	}
+}
+
+func (c *GasPredictionClient) sendFeeBucket(ctx context.Context, req *pb.FeeStatisticsRequest) {
+	for {
+		//종류 ctx가 발생 시
+		if ctx.Err() != nil {
+			return
+		}
+
+		_, err := c.client.UploadFeeBuckets(ctx, req)
+		if err == nil {
+			logger.Info(ctx, "fee statistics sent successfully",
+				slog.String("system", "grpc client"))
+			return
+		}
+
+		// 전송 실패 시 retry
+		logger.Error(ctx, "failed to send fee statistics and retry",
+			err,
+			slog.String("system", "grpc client"))
+
+		if !WaitForRetry(ctx, unaryRetryDelay) {
+			return
+		}
+	}
+}
+
+func (c *GasPredictionClient) FeeBucketSend(req *pb.FeeStatisticsRequest) {
+	select {
+	case c.FeeBucketCh <- req:
+		return
+	default:
+	}
+
+	// 기존에 대기 중인 오래된 데이터 제거
+	select {
+	case <-c.FeeBucketCh: // 채널에 데이터가 있으면 하나 제거
+	default:
+	}
+
+	// 최신 데이터 삽입
+	select {
+	case c.FeeBucketCh <- req:
+	default:
+		logger.Warn(context.Background(), "failed to enqueue latest fee statistics",
+			slog.String("system", "grpc client"))
+	}
+}
+
+func WaitForRetry(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }

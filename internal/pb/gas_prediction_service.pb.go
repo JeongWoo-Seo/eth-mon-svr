@@ -24,19 +24,24 @@ var File_gas_prediction_service_proto protoreflect.FileDescriptor
 
 const file_gas_prediction_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgas_prediction_service.proto\x12\x0egas_monitoring\x1a\x14gas_prediction.proto2}\n" +
+	"\x1cgas_prediction_service.proto\x12\x0egas_monitoring\x1a\x14gas_prediction.proto\x1a\x10fee_bucket.proto2\xde\x01\n" +
 	"\x14GasPredictionService\x12e\n" +
-	"\x14UploadGasPredictions\x12$.gas_monitoring.GasPredictionRequest\x1a%.gas_monitoring.GasPredictionResponse(\x01B1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
+	"\x14UploadGasPredictions\x12$.gas_monitoring.GasPredictionRequest\x1a%.gas_monitoring.GasPredictionResponse(\x01\x12_\n" +
+	"\x10UploadFeeBuckets\x12$.gas_monitoring.FeeStatisticsRequest\x1a%.gas_monitoring.FeeStatisticsResponseB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
 
 var file_gas_prediction_service_proto_goTypes = []any{
 	(*GasPredictionRequest)(nil),  // 0: gas_monitoring.GasPredictionRequest
-	(*GasPredictionResponse)(nil), // 1: gas_monitoring.GasPredictionResponse
+	(*FeeStatisticsRequest)(nil),  // 1: gas_monitoring.FeeStatisticsRequest
+	(*GasPredictionResponse)(nil), // 2: gas_monitoring.GasPredictionResponse
+	(*FeeStatisticsResponse)(nil), // 3: gas_monitoring.FeeStatisticsResponse
 }
 var file_gas_prediction_service_proto_depIdxs = []int32{
 	0, // 0: gas_monitoring.GasPredictionService.UploadGasPredictions:input_type -> gas_monitoring.GasPredictionRequest
-	1, // 1: gas_monitoring.GasPredictionService.UploadGasPredictions:output_type -> gas_monitoring.GasPredictionResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	1, // 1: gas_monitoring.GasPredictionService.UploadFeeBuckets:input_type -> gas_monitoring.FeeStatisticsRequest
+	2, // 2: gas_monitoring.GasPredictionService.UploadGasPredictions:output_type -> gas_monitoring.GasPredictionResponse
+	3, // 3: gas_monitoring.GasPredictionService.UploadFeeBuckets:output_type -> gas_monitoring.FeeStatisticsResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -48,6 +53,7 @@ func file_gas_prediction_service_proto_init() {
 		return
 	}
 	file_gas_prediction_proto_init()
+	file_fee_bucket_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -102,7 +102,7 @@ func main() {
 	// start processor
 	//////////////////////////
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, grpcClient)
-	proc := processor.NewProcess(pendingPool, blockPool, alcEthClient.EthClient, infEthClient.EthClient, analyzer)
+	proc := processor.NewProcess(pendingPool, blockPool, alcEthClient.EthClient, infEthClient.EthClient, analyzer, grpcClient)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)
 

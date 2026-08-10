@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -155,27 +156,71 @@ func (pool *PendingMemPool) removeExpireBucket(tx *PendingTx) {
 	}
 }
 
-// block에 포함된 tx는 mempool에서 제외
-func (pool *PendingMemPool) RemoveByReceipts(receipts []*types.Receipt) int {
+// block에 포함된 tx는 mempool에서 제외 및 tx가 몇 블록만에 포함되었는지 통계
+// 집계에는 map이 편하고, 저장 구조는 slice
+func (pool *PendingMemPool) RemoveByReceipts(header *types.Header, receipts []*types.Receipt) ([]blockstore.FeeBucketStat, int) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
+	curblockNum := header.Number.Uint64()
+	curblockTime := header.Time
+
+	stats := make(map[uint32]*blockstore.FeeBucketStat)
 	removed_cnt := 0
 	for _, receipt := range receipts {
-		if pool.removeByHash(receipt.TxHash) {
-			removed_cnt++
+		tx, ok := pool.HashIndex[receipt.TxHash]
+		if !ok {
+			continue
 		}
+
+		// Pending WS가 늦게 도착하여
+		// 이미 블록에 포함된 tx일 가능성이 있으므로
+		// 포함 통계에서는 제외한다.
+		if tx.SeenBlock > curblockNum || tx.SeenBlockTime > curblockTime {
+			pool.removeByHash(tx)
+			continue
+		}
+
+		// 몇 블록만에 포함되었는지
+		waitblocks := curblockNum - tx.SeenBlock
+		waitSeconds := curblockTime - tx.SeenBlockTime
+		bucket := getFeeBucket(tx.TipCap) // 어느 fee 구간에 포함되는지
+
+		stat, ok := stats[bucket]
+		if !ok {
+			stat = &blockstore.FeeBucketStat{
+				Bucket: bucket,
+			}
+
+			stats[bucket] = stat
+		}
+
+		stat.TxCount++
+		stat.TotalWaitBlocks += waitblocks
+		stat.TotalWaitSeconds += waitSeconds
+
+		//waitblocks이 MaxWaitBlock(10) 이상이면 MaxWaitBlock블록에 저장
+		waitInd := waitblocks
+		if waitInd > MaxWaitBlock {
+			waitInd = MaxWaitBlock
+		}
+		stat.WaitBlockCount[waitInd]++
+
+		// 블록에 포함된 tx 제거
+		pool.removeByHash(tx)
+		removed_cnt++
 	}
 
-	return removed_cnt
+	//map -> slice
+	feeBuckets := make([]blockstore.FeeBucketStat, 0, len(stats))
+	for _, stat := range stats {
+		feeBuckets = append(feeBuckets, *stat)
+	}
+
+	return feeBuckets, removed_cnt
 }
 
-func (pool *PendingMemPool) removeByHash(hash common.Hash) bool {
-	tx, ok := pool.HashIndex[hash]
-	if !ok {
-		return false
-	}
-
+func (pool *PendingMemPool) removeByHash(tx *PendingTx) {
 	account, ok := pool.Accounts[tx.From]
 	if ok {
 		delete(account.NonceMap, tx.Nonce)
@@ -184,11 +229,9 @@ func (pool *PendingMemPool) removeByHash(hash common.Hash) bool {
 		}
 	}
 
-	delete(pool.HashIndex, hash)
+	delete(pool.HashIndex, tx.Hash)
 
 	pool.removeExpireBucket(tx)
-
-	return true
 }
 
 func (pool *PendingMemPool) RemoveExpired(curBlock uint64) int {

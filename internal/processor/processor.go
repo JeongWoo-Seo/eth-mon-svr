@@ -9,6 +9,7 @@ import (
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/grpcClient"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
@@ -32,6 +33,7 @@ type Process struct {
 	alcEthClient *ethclient.Client
 	infEthClient *ethclient.Client
 	gasanalyzer  *gasanalyzer.Analyzer
+	grpcClient   *grpcClient.GasPredictionClient
 
 	limiter *rate.Limiter
 
@@ -41,13 +43,14 @@ type Process struct {
 }
 
 func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, alcClient *ethclient.Client, infClient *ethclient.Client,
-	gasanalyzer *gasanalyzer.Analyzer) *Process {
+	gasanalyzer *gasanalyzer.Analyzer, grpcClinet *grpcClient.GasPredictionClient) *Process {
 	return &Process{
 		pendingPool:  pendingPool,
 		blockstore:   blockstore,
 		alcEthClient: alcClient,
 		infEthClient: infClient,
 		gasanalyzer:  gasanalyzer,
+		grpcClient:   grpcClinet,
 
 		limiter: rate.NewLimiter(rate.Limit(400), 500),
 
@@ -199,17 +202,20 @@ func (p *Process) ProcessBlock(header *types.Header) {
 	// 블록 데이터 가공
 	blockData := p.CalculateBlockTxTip(header, receipts)
 
+	// 블록에 포함된 tx 삭제 및 몇 블록만에 블록에 포함되었는지 계산
+	blockData.FeeBuckets = p.ClearMempoolToReceipts(ctx, header, receipts)
+
 	//block pool에 저장
 	p.blockstore.AddBlock(blockData)
-
-	// 블록에 포함된 tx 삭제
-	p.ClearMempoolToTx(ctx, header, receipts)
 
 	// 오래된 tx 삭제
 	p.removeExpired(header.Number.Uint64())
 
 	// 분석을 위한 블록 및 tx 정보 업데이트 //각 block에 대한 결과값 계산
 	p.UpdateBlockInfoForAnalysis(header)
+
+	//feebucket grpc 전송
+	p.SendFeeBucketsToGrpc()
 }
 
 func (p *Process) Initialize(ctx context.Context) error {

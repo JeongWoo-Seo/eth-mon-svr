@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package gas_monitoring;
+
+option go_package = "github.com/JeongWoo-Seo/eth-mon-svr/internal/pb";
+
+import "google/protobuf/timestamp.proto";
+
+message FeeBucket {
+    uint32 bucket = 1;
+    double min_priority = 2;
+    double max_priority = 3;
+    uint32 total_tx_count = 4;
+
+    double avr_wait_blocks = 5;
+    double avr_wait_seconds = 6;
+
+    repeated WaitBlockCount wait_block_count = 7;
+}
+
+message WaitBlockCount {
+    uint32 wait_block = 1;
+    uint32 tx_count = 2;
+}
+
+message FeeStatisticsRequest {
+    repeated FeeBucket buckets = 2;
+    google.protobuf.Timestamp updated_at = 3;
+}
+
+message FeeStatisticsResponse {
+    bool success = 1;
+    string message = 2;
+}
+

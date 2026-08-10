@@ -262,7 +262,7 @@ func (a *Analyzer) sendResultToGRPC(result *GasPrediction) {
 		UpdatedAt:       timestamppb.New(result.UpdatedAt),
 	}
 
-	a.grpcClient.ResultSend(req)
+	a.grpcClient.GasPredictResultSend(req)
 }
 
 func (a *Analyzer) GetPrediction() GasPrediction {

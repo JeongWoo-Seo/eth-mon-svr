@@ -17,11 +17,11 @@ func NewBlockStore(maxSize int) *Store {
 	}
 }
 
-func (s *Store) AddBlock(block BlockData) {
+func (s *Store) AddBlock(blockData BlockData) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.blocks = append([]BlockData{block}, s.blocks...)
+	s.blocks = append([]BlockData{blockData}, s.blocks...)
 	if len(s.blocks) > s.max {
 		s.blocks = s.blocks[:s.max]
 	}

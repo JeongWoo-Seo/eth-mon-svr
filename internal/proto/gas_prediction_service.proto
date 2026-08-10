@@ -5,7 +5,10 @@ package gas_monitoring;
 option go_package  = "github.com/JeongWoo-Seo/eth-mon-svr/internal/pb";
 
 import "gas_prediction.proto";
+import "fee_bucket.proto";
 
 service GasPredictionService {
     rpc UploadGasPredictions(stream GasPredictionRequest) returns (GasPredictionResponse);
+
+    rpc UploadFeeBuckets(FeeStatisticsRequest) returns (FeeStatisticsResponse);
 }

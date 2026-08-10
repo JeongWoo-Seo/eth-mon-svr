@@ -1,14 +1,18 @@
 package processor
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
+	"slices"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -139,12 +143,12 @@ func (p *Process) CompareFeeHistory(ctx context.Context) {
 	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
 }
 
-func (p *Process) ClearMempoolToTx(ctx context.Context, header *types.Header, receipts []*types.Receipt) {
+func (p *Process) ClearMempoolToReceipts(ctx context.Context, header *types.Header, receipts []*types.Receipt) []blockstore.FeeBucketStat {
 	if len(receipts) == 0 {
-		return
+		return []blockstore.FeeBucketStat{}
 	}
 
-	removedCnt := p.pendingPool.RemoveByReceipts(receipts)
+	feeBucket, removedCnt := p.pendingPool.RemoveByReceipts(header, receipts)
 
 	if removedCnt > 0 {
 		logger.Info(ctx, "Transactions cleared from mempool",
@@ -152,6 +156,8 @@ func (p *Process) ClearMempoolToTx(ctx context.Context, header *types.Header, re
 			slog.Int("removed_count", removedCnt),
 		)
 	}
+
+	return feeBucket
 }
 
 func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
@@ -200,4 +206,114 @@ func (p *Process) removeExpired(blockNum uint64) {
 			slog.Int("removed_count", removedCnt),
 		)
 	}
+}
+
+func (p *Process) SendFeeBucketsToGrpc() {
+	// data aggregate
+	blockData := p.blockstore.GetBlockData()
+	if len(blockData) == 0 {
+		return
+	}
+
+	// fee bucket별 통계 집계
+	stats := aggregateFeeBucket(blockData)
+	if len(stats) == 0 {
+		return
+	}
+
+	// FeeBucket -> protobuf 변환
+	buckets := convertFeeBucketToProto(stats)
+	if len(buckets) == 0 {
+		return
+	}
+
+	// Bucket 번호 순으로 정렬
+	slices.SortFunc(buckets, func(a, b *pb.FeeBucket) int {
+		return cmp.Compare(a.Bucket, b.Bucket)
+	})
+
+	req := &pb.FeeStatisticsRequest{
+		Buckets:   buckets,
+		UpdatedAt: timestamppb.Now(),
+	}
+
+	// grpc send data(->ch)
+	p.grpcClient.FeeBucketSend(req)
+}
+
+func aggregateFeeBucket(blockData []blockstore.BlockData) map[uint32]*blockstore.FeeBucketStat {
+	stats := make(map[uint32]*blockstore.FeeBucketStat)
+
+	for _, block := range blockData {
+		if len(block.FeeBuckets) == 0 {
+			continue
+		}
+
+		for _, bucket := range block.FeeBuckets {
+			stat, ok := stats[bucket.Bucket]
+			if !ok {
+				stat = &blockstore.FeeBucketStat{
+					Bucket: bucket.Bucket,
+				}
+
+				stats[bucket.Bucket] = stat
+			}
+
+			stat.TxCount += bucket.TxCount
+			stat.TotalWaitBlocks += bucket.TotalWaitBlocks
+			stat.TotalWaitSeconds += bucket.TotalWaitSeconds
+
+			for i := 0; i < len(stat.WaitBlockCount); i++ {
+				stat.WaitBlockCount[i] += bucket.WaitBlockCount[i]
+			}
+		}
+	}
+
+	return stats
+}
+
+func convertFeeBucketToProto(stats map[uint32]*blockstore.FeeBucketStat) []*pb.FeeBucket {
+	buckets := make([]*pb.FeeBucket, 0, len(stats))
+
+	for _, stat := range stats {
+		if stat.TxCount == 0 {
+			continue
+		}
+
+		minP, maxP := getFeeBucketRange(stat.Bucket)
+
+		pbBucket := &pb.FeeBucket{
+			Bucket:       stat.Bucket,
+			MinPriority:  minP,
+			MaxPriority:  maxP,
+			TotalTxCount: stat.TxCount,
+
+			AvrWaitBlocks:  float64(stat.TotalWaitBlocks) / float64(stat.TxCount),
+			AvrWaitSeconds: float64(stat.TotalWaitSeconds) / float64(stat.TxCount),
+		}
+
+		//wait block count
+		for waitBlock, txCount := range stat.WaitBlockCount {
+			if txCount == 0 {
+				continue
+			}
+
+			pbBucket.WaitBlockCount = append(pbBucket.WaitBlockCount,
+				&pb.WaitBlockCount{
+					WaitBlock: uint32(waitBlock),
+					TxCount:   txCount,
+				})
+		}
+
+		buckets = append(buckets, pbBucket)
+	}
+
+	return buckets
+}
+
+func getFeeBucketRange(bucket uint32) (float64, float64) {
+	min := float64(bucket) * blockstore.FeeBucketSize
+	max := min + blockstore.FeeBucketSize
+
+	return min, max
 }

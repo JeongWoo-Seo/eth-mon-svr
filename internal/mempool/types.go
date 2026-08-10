@@ -2,6 +2,10 @@ package mempool
 
 import "github.com/ethereum/go-ethereum/common"
 
+const (
+	MaxWaitBlock = 10
+)
+
 type PendingTx struct {
 	Hash  common.Hash
 	From  common.Address

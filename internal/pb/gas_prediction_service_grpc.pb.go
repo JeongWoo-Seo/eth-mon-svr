@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	GasPredictionService_UploadGasPredictions_FullMethodName = "/gas_monitoring.GasPredictionService/UploadGasPredictions"
+	GasPredictionService_UploadFeeBuckets_FullMethodName     = "/gas_monitoring.GasPredictionService/UploadFeeBuckets"
 )
 
 // GasPredictionServiceClient is the client API for GasPredictionService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GasPredictionServiceClient interface {
 	UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse], error)
+	UploadFeeBuckets(ctx context.Context, in *FeeStatisticsRequest, opts ...grpc.CallOption) (*FeeStatisticsResponse, error)
 }
 
 type gasPredictionServiceClient struct {
@@ -50,11 +52,22 @@ func (c *gasPredictionServiceClient) UploadGasPredictions(ctx context.Context, o
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type GasPredictionService_UploadGasPredictionsClient = grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse]
 
+func (c *gasPredictionServiceClient) UploadFeeBuckets(ctx context.Context, in *FeeStatisticsRequest, opts ...grpc.CallOption) (*FeeStatisticsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FeeStatisticsResponse)
+	err := c.cc.Invoke(ctx, GasPredictionService_UploadFeeBuckets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GasPredictionServiceServer is the server API for GasPredictionService service.
 // All implementations must embed UnimplementedGasPredictionServiceServer
 // for forward compatibility.
 type GasPredictionServiceServer interface {
 	UploadGasPredictions(grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]) error
+	UploadFeeBuckets(context.Context, *FeeStatisticsRequest) (*FeeStatisticsResponse, error)
 	mustEmbedUnimplementedGasPredictionServiceServer()
 }
 
@@ -67,6 +80,9 @@ type UnimplementedGasPredictionServiceServer struct{}
 
 func (UnimplementedGasPredictionServiceServer) UploadGasPredictions(grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]) error {
 	return status.Error(codes.Unimplemented, "method UploadGasPredictions not implemented")
+}
+func (UnimplementedGasPredictionServiceServer) UploadFeeBuckets(context.Context, *FeeStatisticsRequest) (*FeeStatisticsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UploadFeeBuckets not implemented")
 }
 func (UnimplementedGasPredictionServiceServer) mustEmbedUnimplementedGasPredictionServiceServer() {}
 func (UnimplementedGasPredictionServiceServer) testEmbeddedByValue()                              {}
@@ -96,13 +112,36 @@ func _GasPredictionService_UploadGasPredictions_Handler(srv interface{}, stream 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type GasPredictionService_UploadGasPredictionsServer = grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]
 
+func _GasPredictionService_UploadFeeBuckets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FeeStatisticsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GasPredictionServiceServer).UploadFeeBuckets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GasPredictionService_UploadFeeBuckets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GasPredictionServiceServer).UploadFeeBuckets(ctx, req.(*FeeStatisticsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GasPredictionService_ServiceDesc is the grpc.ServiceDesc for GasPredictionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var GasPredictionService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "gas_monitoring.GasPredictionService",
 	HandlerType: (*GasPredictionServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "UploadFeeBuckets",
+			Handler:    _GasPredictionService_UploadFeeBuckets_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "UploadGasPredictions",
