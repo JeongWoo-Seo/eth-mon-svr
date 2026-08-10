@@ -312,8 +312,10 @@ func convertFeeBucketToProto(stats map[uint32]*blockstore.FeeBucketStat) []*pb.F
 }
 
 func getFeeBucketRange(bucket uint32) (float64, float64) {
-	min := float64(bucket) * blockstore.FeeBucketSize
-	max := min + blockstore.FeeBucketSize
+	var weiPerGwei float64 = 1_000_000_000
+
+	min := float64(blockstore.FeeBucketSize) / weiPerGwei * float64(bucket)
+	max := min + float64(blockstore.FeeBucketSize)/weiPerGwei
 
 	return min, max
 }
