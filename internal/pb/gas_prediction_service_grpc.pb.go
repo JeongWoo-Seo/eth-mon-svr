@@ -28,7 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GasPredictionServiceClient interface {
 	UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse], error)
-	UploadFeeBuckets(ctx context.Context, in *FeeStatisticsRequest, opts ...grpc.CallOption) (*FeeStatisticsResponse, error)
+	UploadFeeBuckets(ctx context.Context, in *FeeStatisticsRequest, opts ...grpc.CallOption) (*CommonResponse, error)
 }
 
 type gasPredictionServiceClient struct {
@@ -52,9 +52,9 @@ func (c *gasPredictionServiceClient) UploadGasPredictions(ctx context.Context, o
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type GasPredictionService_UploadGasPredictionsClient = grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse]
 
-func (c *gasPredictionServiceClient) UploadFeeBuckets(ctx context.Context, in *FeeStatisticsRequest, opts ...grpc.CallOption) (*FeeStatisticsResponse, error) {
+func (c *gasPredictionServiceClient) UploadFeeBuckets(ctx context.Context, in *FeeStatisticsRequest, opts ...grpc.CallOption) (*CommonResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(FeeStatisticsResponse)
+	out := new(CommonResponse)
 	err := c.cc.Invoke(ctx, GasPredictionService_UploadFeeBuckets_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func (c *gasPredictionServiceClient) UploadFeeBuckets(ctx context.Context, in *F
 // for forward compatibility.
 type GasPredictionServiceServer interface {
 	UploadGasPredictions(grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]) error
-	UploadFeeBuckets(context.Context, *FeeStatisticsRequest) (*FeeStatisticsResponse, error)
+	UploadFeeBuckets(context.Context, *FeeStatisticsRequest) (*CommonResponse, error)
 	mustEmbedUnimplementedGasPredictionServiceServer()
 }
 
@@ -81,7 +81,7 @@ type UnimplementedGasPredictionServiceServer struct{}
 func (UnimplementedGasPredictionServiceServer) UploadGasPredictions(grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]) error {
 	return status.Error(codes.Unimplemented, "method UploadGasPredictions not implemented")
 }
-func (UnimplementedGasPredictionServiceServer) UploadFeeBuckets(context.Context, *FeeStatisticsRequest) (*FeeStatisticsResponse, error) {
+func (UnimplementedGasPredictionServiceServer) UploadFeeBuckets(context.Context, *FeeStatisticsRequest) (*CommonResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UploadFeeBuckets not implemented")
 }
 func (UnimplementedGasPredictionServiceServer) mustEmbedUnimplementedGasPredictionServiceServer() {}

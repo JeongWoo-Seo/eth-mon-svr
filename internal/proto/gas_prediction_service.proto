@@ -10,5 +10,10 @@ import "fee_bucket.proto";
 service GasPredictionService {
     rpc UploadGasPredictions(stream GasPredictionRequest) returns (GasPredictionResponse);
 
-    rpc UploadFeeBuckets(FeeStatisticsRequest) returns (FeeStatisticsResponse);
+    rpc UploadFeeBuckets(FeeStatisticsRequest) returns (CommonResponse);
+}
+
+message CommonResponse {
+    bool success = 1;
+    string message = 2;
 }

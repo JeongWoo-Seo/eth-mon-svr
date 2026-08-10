@@ -7,7 +7,6 @@ require (
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/spf13/viper v1.21.0
-	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.77.0
 	google.golang.org/protobuf v1.36.11

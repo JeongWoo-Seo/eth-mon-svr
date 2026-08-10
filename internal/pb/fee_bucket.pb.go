@@ -218,58 +218,6 @@ func (x *FeeStatisticsRequest) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type FeeStatisticsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FeeStatisticsResponse) Reset() {
-	*x = FeeStatisticsResponse{}
-	mi := &file_fee_bucket_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FeeStatisticsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FeeStatisticsResponse) ProtoMessage() {}
-
-func (x *FeeStatisticsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fee_bucket_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FeeStatisticsResponse.ProtoReflect.Descriptor instead.
-func (*FeeStatisticsResponse) Descriptor() ([]byte, []int) {
-	return file_fee_bucket_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *FeeStatisticsResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *FeeStatisticsResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
 var File_fee_bucket_proto protoreflect.FileDescriptor
 
 const file_fee_bucket_proto_rawDesc = "" +
@@ -290,10 +238,7 @@ const file_fee_bucket_proto_rawDesc = "" +
 	"\x14FeeStatisticsRequest\x123\n" +
 	"\abuckets\x18\x02 \x03(\v2\x19.gas_monitoring.FeeBucketR\abuckets\x129\n" +
 	"\n" +
-	"updated_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"K\n" +
-	"\x15FeeStatisticsResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessageB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
+	"updated_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
 
 var (
 	file_fee_bucket_proto_rawDescOnce sync.Once
@@ -307,18 +252,17 @@ func file_fee_bucket_proto_rawDescGZIP() []byte {
 	return file_fee_bucket_proto_rawDescData
 }
 
-var file_fee_bucket_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_fee_bucket_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_fee_bucket_proto_goTypes = []any{
 	(*FeeBucket)(nil),             // 0: gas_monitoring.FeeBucket
 	(*WaitBlockCount)(nil),        // 1: gas_monitoring.WaitBlockCount
 	(*FeeStatisticsRequest)(nil),  // 2: gas_monitoring.FeeStatisticsRequest
-	(*FeeStatisticsResponse)(nil), // 3: gas_monitoring.FeeStatisticsResponse
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
 }
 var file_fee_bucket_proto_depIdxs = []int32{
 	1, // 0: gas_monitoring.FeeBucket.wait_block_count:type_name -> gas_monitoring.WaitBlockCount
 	0, // 1: gas_monitoring.FeeStatisticsRequest.buckets:type_name -> gas_monitoring.FeeBucket
-	4, // 2: gas_monitoring.FeeStatisticsRequest.updated_at:type_name -> google.protobuf.Timestamp
+	3, // 2: gas_monitoring.FeeStatisticsRequest.updated_at:type_name -> google.protobuf.Timestamp
 	3, // [3:3] is the sub-list for method output_type
 	3, // [3:3] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
@@ -337,7 +281,7 @@ func file_fee_bucket_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_fee_bucket_proto_rawDesc), len(file_fee_bucket_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

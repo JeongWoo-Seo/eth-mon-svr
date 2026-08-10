@@ -10,6 +10,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
+	sync "sync"
 	unsafe "unsafe"
 )
 
@@ -20,26 +21,94 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type CommonResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommonResponse) Reset() {
+	*x = CommonResponse{}
+	mi := &file_gas_prediction_service_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommonResponse) ProtoMessage() {}
+
+func (x *CommonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_gas_prediction_service_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommonResponse.ProtoReflect.Descriptor instead.
+func (*CommonResponse) Descriptor() ([]byte, []int) {
+	return file_gas_prediction_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *CommonResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *CommonResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_gas_prediction_service_proto protoreflect.FileDescriptor
 
 const file_gas_prediction_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgas_prediction_service.proto\x12\x0egas_monitoring\x1a\x14gas_prediction.proto\x1a\x10fee_bucket.proto2\xde\x01\n" +
+	"\x1cgas_prediction_service.proto\x12\x0egas_monitoring\x1a\x14gas_prediction.proto\x1a\x10fee_bucket.proto\"D\n" +
+	"\x0eCommonResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\xd7\x01\n" +
 	"\x14GasPredictionService\x12e\n" +
-	"\x14UploadGasPredictions\x12$.gas_monitoring.GasPredictionRequest\x1a%.gas_monitoring.GasPredictionResponse(\x01\x12_\n" +
-	"\x10UploadFeeBuckets\x12$.gas_monitoring.FeeStatisticsRequest\x1a%.gas_monitoring.FeeStatisticsResponseB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
+	"\x14UploadGasPredictions\x12$.gas_monitoring.GasPredictionRequest\x1a%.gas_monitoring.GasPredictionResponse(\x01\x12X\n" +
+	"\x10UploadFeeBuckets\x12$.gas_monitoring.FeeStatisticsRequest\x1a\x1e.gas_monitoring.CommonResponseB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
 
+var (
+	file_gas_prediction_service_proto_rawDescOnce sync.Once
+	file_gas_prediction_service_proto_rawDescData []byte
+)
+
+func file_gas_prediction_service_proto_rawDescGZIP() []byte {
+	file_gas_prediction_service_proto_rawDescOnce.Do(func() {
+		file_gas_prediction_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_gas_prediction_service_proto_rawDesc), len(file_gas_prediction_service_proto_rawDesc)))
+	})
+	return file_gas_prediction_service_proto_rawDescData
+}
+
+var file_gas_prediction_service_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gas_prediction_service_proto_goTypes = []any{
-	(*GasPredictionRequest)(nil),  // 0: gas_monitoring.GasPredictionRequest
-	(*FeeStatisticsRequest)(nil),  // 1: gas_monitoring.FeeStatisticsRequest
-	(*GasPredictionResponse)(nil), // 2: gas_monitoring.GasPredictionResponse
-	(*FeeStatisticsResponse)(nil), // 3: gas_monitoring.FeeStatisticsResponse
+	(*CommonResponse)(nil),        // 0: gas_monitoring.CommonResponse
+	(*GasPredictionRequest)(nil),  // 1: gas_monitoring.GasPredictionRequest
+	(*FeeStatisticsRequest)(nil),  // 2: gas_monitoring.FeeStatisticsRequest
+	(*GasPredictionResponse)(nil), // 3: gas_monitoring.GasPredictionResponse
 }
 var file_gas_prediction_service_proto_depIdxs = []int32{
-	0, // 0: gas_monitoring.GasPredictionService.UploadGasPredictions:input_type -> gas_monitoring.GasPredictionRequest
-	1, // 1: gas_monitoring.GasPredictionService.UploadFeeBuckets:input_type -> gas_monitoring.FeeStatisticsRequest
-	2, // 2: gas_monitoring.GasPredictionService.UploadGasPredictions:output_type -> gas_monitoring.GasPredictionResponse
-	3, // 3: gas_monitoring.GasPredictionService.UploadFeeBuckets:output_type -> gas_monitoring.FeeStatisticsResponse
+	1, // 0: gas_monitoring.GasPredictionService.UploadGasPredictions:input_type -> gas_monitoring.GasPredictionRequest
+	2, // 1: gas_monitoring.GasPredictionService.UploadFeeBuckets:input_type -> gas_monitoring.FeeStatisticsRequest
+	3, // 2: gas_monitoring.GasPredictionService.UploadGasPredictions:output_type -> gas_monitoring.GasPredictionResponse
+	0, // 3: gas_monitoring.GasPredictionService.UploadFeeBuckets:output_type -> gas_monitoring.CommonResponse
 	2, // [2:4] is the sub-list for method output_type
 	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -60,12 +129,13 @@ func file_gas_prediction_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gas_prediction_service_proto_rawDesc), len(file_gas_prediction_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   0,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_gas_prediction_service_proto_goTypes,
 		DependencyIndexes: file_gas_prediction_service_proto_depIdxs,
+		MessageInfos:      file_gas_prediction_service_proto_msgTypes,
 	}.Build()
 	File_gas_prediction_service_proto = out.File
 	file_gas_prediction_service_proto_goTypes = nil
