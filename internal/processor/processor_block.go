@@ -3,14 +3,19 @@ package processor
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"log/slog"
+	"math/big"
 	"slices"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
+	"github.com/dustin/go-humanize"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -55,7 +60,9 @@ func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions
 			return nil, err
 		}
 
-		err := p.alcEthClient.Client().BatchCallContext(ctx, chunkElems)
+		err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+			return client.Client().BatchCallContext(ctx, chunkElems)
+		})
 		if err != nil {
 			logger.Error(ctx, "Failed to fetch receipts batch chunk",
 				err,
@@ -91,7 +98,9 @@ func (p *Process) fetchBlockReceipts(ctx context.Context, blockNumberHex string)
 		return nil, err
 	}
 
-	err := p.alcEthClient.Client().CallContext(ctx, &receipts, "eth_getBlockReceipts", blockNumberHex)
+	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+		return client.Client().CallContext(ctx, &receipts, "eth_getBlockReceipts", blockNumberHex)
+	})
 	if err != nil {
 		logger.Error(ctx, "Failed to fetch block receipts",
 			err,
@@ -133,6 +142,21 @@ func (p *Process) CalculateBlockTxTip(header *types.Header, receipts []*types.Re
 }
 
 func (p *Process) CompareFeeHistory(ctx context.Context) {
+	preResult := p.gasanalyzer.GetPrediction()
+
+	if preResult.NextBlockNumber == 0 || preResult.AnalyzerBlock == nil {
+		logger.Info(ctx, "empty result data",
+			"system", "analysis",
+			"block_num", preResult.NextBlockNumber)
+		return
+	}
+
+	//0.90 -> 90 으로 변환하기위한 과정
+	per := make([]float64, 0, len(gasanalyzer.GasPredictionTargets))
+	for _, t := range gasanalyzer.GasPredictionTargets {
+		per = append(per, t.Percentile*100)
+	}
+
 	if err := p.limiter.WaitN(ctx, feeHistoryCu); err != nil {
 		logger.Error(ctx, "Rate limiter error in CompareFeeHistory",
 			err,
@@ -140,7 +164,63 @@ func (p *Process) CompareFeeHistory(ctx context.Context) {
 			"requested_cu", feeHistoryCu)
 		return
 	}
-	p.gasanalyzer.CompareFeeHistory(p.alcEthClient)
+
+	var history *ethereum.FeeHistory
+	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+		var err error
+		history, err = client.FeeHistory(ctx, 1, big.NewInt(int64(preResult.NextBlockNumber)), per)
+		return err
+	})
+	if err != nil {
+		logger.Error(ctx, "failed to get block fee history",
+			err,
+			"system", "analysis",
+			"block_num", preResult.NextBlockNumber)
+		return
+	}
+
+	//결과 비교
+	if len(history.Reward) > 0 && len(history.BaseFee) >= 2 {
+		reward := history.Reward[0]
+
+		for i, t := range gasanalyzer.GasPredictionTargets {
+
+			actualTip := reward[i].Uint64()
+
+			if _, ok := preResult.AnalyzerBlock[t.Name]; ok {
+				anaBlock := int64(preResult.AnalyzerBlock[t.Name].PriorityFee)
+				anaPending := int64(preResult.AnalyzerPending[t.Name].PriorityFee)
+
+				blend := int64(preResult.PredictResult[t.Name].PriorityFee)
+				diff := blend - int64(actualTip)
+
+				sAnaBlock := humanize.Comma(anaBlock)
+				sAnaPending := humanize.Comma(anaPending)
+				sBlend := humanize.Comma(blend)
+				sActual := humanize.Comma(int64(actualTip))
+				sDiff := humanize.Comma(diff)
+				if diff > 0 {
+					sDiff = "+" + sDiff // 양수일 때 +
+				}
+
+				fmt.Printf(
+					"%-10s | %-14s | %-14s | %-14s | %-14s | %-12s\n",
+					t.Name,
+					sAnaBlock,
+					sAnaPending,
+					sBlend,
+					sActual,
+					sDiff,
+				)
+
+			} else {
+				fmt.Printf(
+					"%-10s | 데이터 없음\n", t.Name)
+			}
+		}
+
+		fmt.Printf("BaseFee - 예측 : %d 실제 : %d \n", preResult.NextBaseFee, history.BaseFee[0].Uint64())
+	}
 }
 
 func (p *Process) ClearMempoolToReceipts(ctx context.Context, header *types.Header, receipts []*types.Receipt) []blockstore.FeeBucketStat {
@@ -190,11 +270,9 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 	blockResult, cutoff := p.gasanalyzer.BlockPercentiles(pool)
 
 	// 가스 분석을 위한 블록 정보 업데이트
-	p.gasanalyzer.UpdateLatestBlockData(
-		header,
-		nextBaseFee.Uint64(),
-		cutoff,
-	)
+	p.gasanalyzer.UpdateLatestBlockData(header, nextBaseFee.Uint64(), cutoff)
+
+	//블록에 포함된 tx기반 가스 예측
 	p.gasanalyzer.UpdateAnalBlockTxPredictionGasResult(blockResult)
 }
 

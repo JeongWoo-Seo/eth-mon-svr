@@ -18,6 +18,8 @@ type Config struct {
 	EthAlcRpcWsUrl    string  `mapstructure:"ETH_ALC_RPC_WS_URL"`
 	EthInfRpcHttpUrl  string  `mapstructure:"ETH_INF_RPC_HTTP_URL"`
 	EthInfRpcWsUrl    string  `mapstructure:"ETH_INF_RPC_WS_URL"`
+	EthChaRpcHttpUrl  string  `mapstructure:"ETH_CHA_RPC_HTTP_URL"`
+	EthChaRpcWsUrl    string  `mapstructure:"ETH_CHA_RPC_WS_URL"`
 	WorkerCount       int     `mapstructure:"WORKER_COUNT"`
 	TxStoreBlockTTL   uint64  `mapstructure:"TX_STORE_BLOCK_TTL"`
 	MaxBlockCount     int     `mapstructure:"MAX_BLOCK_COUNT"`

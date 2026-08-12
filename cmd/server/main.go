@@ -10,10 +10,12 @@ import (
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/eth"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/grpcClient"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/ingestion"
+	rpcmanager "github.com/JeongWoo-Seo/eth-mon-svr/internal/network/rpcManager"
+
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/grpcClient"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/ingestion"
+
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/processor"
@@ -39,7 +41,7 @@ func main() {
 	//////////////////////////
 	// connect eth
 	//////////////////////////
-	alcEthClient, err := eth.NewEthClient(cfg.EthAlcRpcHttpUrl)
+	rpcManager, err := rpcmanager.NewRpcManager(cfg.EthAlcRpcHttpUrl, cfg.EthChaRpcHttpUrl)
 	if err != nil {
 		logger.Error(ctx, "failed to connect ethereum rpc",
 			err,
@@ -48,18 +50,7 @@ func main() {
 		)
 		panic(err)
 	}
-	defer alcEthClient.Close()
-
-	infEthClient, err := eth.NewEthClient(cfg.EthInfRpcHttpUrl)
-	if err != nil {
-		logger.Error(ctx, "failed to connect ethereum rpc",
-			err,
-			"system", "ethereum",
-			"action", "connect",
-		)
-		panic(err)
-	}
-	defer infEthClient.Close()
+	defer rpcManager.Close()
 
 	logger.Info(ctx, "ethereum connected",
 		slog.String("system", "ethereum"),
@@ -102,7 +93,7 @@ func main() {
 	// start processor
 	//////////////////////////
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, grpcClient)
-	proc := processor.NewProcess(pendingPool, blockPool, alcEthClient.EthClient, infEthClient.EthClient, analyzer, grpcClient)
+	proc := processor.NewProcess(pendingPool, blockPool, rpcManager, analyzer, grpcClient)
 	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
 	pendingWorker.Start(ctx)
 
@@ -121,7 +112,7 @@ func main() {
 	//////////////////////////
 	// subscribe eth
 	//////////////////////////
-	sub := ingestion.NewSubscriber(cfg.EthAlcRpcWsUrl, cfg.EthInfRpcWsUrl, blockWorker.Input(), pendingWorker.Input(), dedup)
+	sub := ingestion.NewSubscriber(cfg.EthAlcRpcWsUrl, cfg.EthChaRpcWsUrl, blockWorker.Input(), pendingWorker.Input(), dedup)
 	sub.SubscriberStart(ctx)
 
 	//////////////////////////

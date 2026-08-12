@@ -9,9 +9,10 @@ import (
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/grpcClient"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/grpcClient"
+	rpcmanager "github.com/JeongWoo-Seo/eth-mon-svr/internal/network/rpcManager"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -28,12 +29,11 @@ const (
 )
 
 type Process struct {
-	pendingPool  *mempool.PendingMemPool
-	blockstore   *blockstore.Store
-	alcEthClient *ethclient.Client
-	infEthClient *ethclient.Client
-	gasanalyzer  *gasanalyzer.Analyzer
-	grpcClient   *grpcClient.GasPredictionClient
+	pendingPool *mempool.PendingMemPool
+	blockstore  *blockstore.Store
+	rpcManager  *rpcmanager.RPCManager
+	gasanalyzer *gasanalyzer.Analyzer
+	grpcClient  *grpcClient.GasPredictionClient
 
 	limiter *rate.Limiter
 
@@ -42,51 +42,17 @@ type Process struct {
 	fallbackUntil  time.Time
 }
 
-func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, alcClient *ethclient.Client, infClient *ethclient.Client,
+func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, rpcManager *rpcmanager.RPCManager,
 	gasanalyzer *gasanalyzer.Analyzer, grpcClinet *grpcClient.GasPredictionClient) *Process {
 	return &Process{
-		pendingPool:  pendingPool,
-		blockstore:   blockstore,
-		alcEthClient: alcClient,
-		infEthClient: infClient,
-		gasanalyzer:  gasanalyzer,
-		grpcClient:   grpcClinet,
+		pendingPool: pendingPool,
+		blockstore:  blockstore,
+		rpcManager:  rpcManager,
+		gasanalyzer: gasanalyzer,
+		grpcClient:  grpcClinet,
 
 		limiter: rate.NewLimiter(rate.Limit(400), 500),
-
-		isFallbackMode: false,
-		fallbackUntil:  time.Now(),
 	}
-}
-
-func (p *Process) ethClientFunc(ctx context.Context, fn func(client *ethclient.Client) error) error {
-	now := time.Now()
-	p.mu.Lock()
-	if p.isFallbackMode && now.After(p.fallbackUntil) {
-		p.isFallbackMode = false
-	}
-	isFallbackMode := p.isFallbackMode && now.Before(p.fallbackUntil)
-	p.mu.Unlock()
-
-	//인프라 백업 클라이언트로 실행
-	if isFallbackMode {
-		return fn(p.infEthClient)
-	}
-
-	// 알케미 클라이언트 실행
-	if err := fn(p.alcEthClient); err == nil {
-		return nil
-	}
-
-	p.mu.Lock()
-	if !p.isFallbackMode {
-		p.isFallbackMode = true
-		p.fallbackUntil = time.Now().Add(1 * time.Minute)
-	}
-	p.mu.Unlock()
-
-	//알케미 실패시 인프라로 다시 실행
-	return fn(p.infEthClient)
 }
 
 func (p *Process) GetTxInfo(hashes []common.Hash) {
@@ -124,7 +90,9 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 		}
 
 		// 알케미 요청
-		err := p.alcEthClient.Client().BatchCallContext(ctx, chunkElems)
+		err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+			return client.Client().BatchCallContext(ctx, chunkElems)
+		})
 		if err != nil {
 			logger.Error(ctx, "Failed to get tx info chunk",
 				err,
@@ -220,7 +188,12 @@ func (p *Process) ProcessBlock(header *types.Header) {
 
 func (p *Process) Initialize(ctx context.Context) error {
 	// 최신 블록 조회
-	header, err := p.alcEthClient.HeaderByNumber(ctx, nil)
+	var header *types.Header
+	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+		var err error
+		header, err = client.HeaderByNumber(ctx, nil)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to get latest block number: %w", err)
 	}

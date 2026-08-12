@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/grpcClient"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/grpcClient"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"google.golang.org/protobuf/types/known/timestamppb"
