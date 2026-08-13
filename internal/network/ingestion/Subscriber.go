@@ -2,8 +2,10 @@ package ingestion
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
@@ -14,44 +16,116 @@ import (
 )
 
 const (
-	reconnectDelay = 5 * time.Second
-	txBufferSize   = 50000
-	headBufferSize = 100
+	pendingRotationInterval = 30 * time.Second
+	headerTimeout           = 30 * time.Second
+	watchdogInterval        = 10 * time.Second
+	reconnectDelay          = 1 * time.Second
+	txBufferSize            = 50000
+	headBufferSize          = 100
+)
+
+var (
+	errHeaderTimeout      = errors.New("ethereum header timeout")
+	errSubscriptionClosed = errors.New("ethereum subscription closed")
+)
+
+const (
+	ProviderAlchemy    string = "alchemy"
+	ProviderChainstack string = "chainstack"
 )
 
 type Subscriber struct {
-	AlcWsUrl   string
-	InfWsUrl   string
-	headerChan chan<- *types.Header
-	txHashChan chan<- string
-	dedup      *mempool.Cache
-	wg         sync.WaitGroup
+	AlcWsUrl      string
+	chaWsUrl      string
+	headerChan    chan<- *types.Header
+	txHashChan    chan<- string
+	dedup         *mempool.Cache
+	wg            sync.WaitGroup
+	blockProvider atomic.Value
+	pendingSwitch chan string
 }
 
-func NewSubscriber(AlcUrl, InfUrl string, headerChan chan<- *types.Header, txHashChan chan<- string, dedup *mempool.Cache) *Subscriber {
-	return &Subscriber{
-		AlcWsUrl:   AlcUrl,
-		InfWsUrl:   InfUrl,
-		headerChan: headerChan,
-		txHashChan: txHashChan,
-		dedup:      dedup,
+func NewSubscriber(alcUrl, chaUrl string, headerChan chan<- *types.Header, txHashChan chan<- string, dedup *mempool.Cache) *Subscriber {
+	s := &Subscriber{
+		AlcWsUrl:      alcUrl,
+		chaWsUrl:      chaUrl,
+		headerChan:    headerChan,
+		txHashChan:    txHashChan,
+		dedup:         dedup,
+		pendingSwitch: make(chan string, 4),
 	}
+
+	s.blockProvider.Store(ProviderAlchemy)
+	return s
 }
 
 func (s *Subscriber) SubscriberStart(ctx context.Context) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		subscription(ctx, s.AlcWsUrl, "Header", "newHeads", headBufferSize, s.headerChan, nil)
+		s.runHeaderSub(ctx)
 	}()
 
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		subscription(ctx, s.AlcWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
+		s.runPendingSub(ctx)
 	}()
+}
 
-	//go subscription(ctx, s.InfWsUrl, "PendingTx", "newPendingTransactions", txBufferSize, s.txHashChan, s.dedup)
+func (s *Subscriber) Wait() {
+	s.wg.Wait()
+}
+
+type Provider struct {
+	name string
+	url  string
+}
+
+func (s *Subscriber) providers() []Provider {
+	return []Provider{
+		{
+			name: ProviderChainstack,
+			url:  s.chaWsUrl,
+		},
+		{
+			name: ProviderAlchemy,
+			url:  s.AlcWsUrl,
+		},
+	}
+}
+
+func (s *Subscriber) notifyPendingSwitch(provider string) {
+	select {
+	case s.pendingSwitch <- provider:
+	default:
+	}
+}
+
+func (s *Subscriber) provider(name string) (Provider, bool) {
+	for _, p := range s.providers() {
+		if p.name == name {
+			if p.url == "" {
+				return Provider{}, false
+			}
+			return p, true
+		}
+	}
+	return Provider{}, false
+}
+
+func (s *Subscriber) alternateProvider(name string) (Provider, bool) {
+	for _, p := range s.providers() {
+		if p.name != name {
+			if p.url == "" {
+				return Provider{}, false
+			}
+
+			return p, true
+		}
+	}
+
+	return Provider{}, false
 }
 
 func subscription[T any](
@@ -144,8 +218,4 @@ func connectAndStream[T any](
 			}
 		}
 	}
-}
-
-func (s *Subscriber) Wait() {
-	s.wg.Wait()
 }
