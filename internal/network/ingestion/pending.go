@@ -2,8 +2,6 @@ package ingestion
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -13,155 +11,210 @@ import (
 )
 
 // pending tx
+type pendingSession struct {
+	provider Provider
+	cancel   context.CancelFunc
+	ready    chan struct{} //세션 연결 완료 채널
+	done     chan error    //세션 연결 종료 채널
+}
 
 func (s *Subscriber) runPendingSub(ctx context.Context) {
-	curProvider := ProviderChainstack
+	// 첫번째 provider 적용
+	curProvider := s.providers()[0]
+
+	session, err := s.startPendingSession(ctx, curProvider)
+	if err != nil {
+		logger.Error(ctx, "initial pending session failed",
+			err,
+			slog.String("system", "ethereum"),
+			slog.String("action", "subscribe"),
+			slog.String("Provider", curProvider.name),
+		)
+		return
+	}
 
 	rotation := time.NewTicker(pendingRotationInterval)
 	defer rotation.Stop()
 
-session:
 	for {
-		if ctx.Err() != nil {
+		select {
+		// 종료 신호
+		case <-ctx.Done():
+			session.cancel()
 			return
-		}
 
-		provider, ok := s.provider(curProvider)
-		if !ok {
-			nextProvider, exists := s.alternateProvider(curProvider)
-			if !exists {
-				logger.Error(ctx, "no ethereum pending provider available",
-					errors.New("no provider"),
+		// 주지적으로 provider 변경
+		case <-rotation.C:
+			nextProvider, ok := s.alternateProvider(session.provider.name)
+			if !ok {
+				continue
+			}
+
+			nextSession, ok := s.handoverPending(ctx, session, nextProvider)
+			if ok {
+				logger.Info(ctx, "rotation pending provider switch",
+					slog.String("system", "ethereum"),
+					slog.String("action", "handover"),
+					slog.String("from", session.provider.name),
+					slog.String("to", nextSession.provider.name),
 				)
+				session = nextSession
+			}
+
+		// block ws 장애로 인한 provier 변경 요청
+		case forced, ok := <-s.pendingSwitch:
+			if !ok { //채널이 닫힌 경우
+				logger.Error(ctx, "pending switch channel closed",
+					errPendingSwitchChannelClose,
+					slog.String("system", "ethereum"),
+				)
+				session.cancel()
 				return
 			}
 
-			curProvider = nextProvider.name
-			continue
-		}
+			//이미 변경할 provider로 동작 중인 경우
+			if forced == session.provider.name {
+				continue
+			}
 
-		logger.Info(ctx, "starting ethereum pending subscription",
-			slog.String("system", "ethereum"),
-			slog.String("action", "subscribe"),
-			slog.String("subscription", "PendingTx"),
-			slog.String("provider", provider.name),
-		)
+			//연결할 다른 provider가 없는 경우
+			nextProvider, ok := s.provider(forced)
+			if !ok {
+				continue
+			}
 
-		streamCtx, cancel := context.WithCancel(ctx)
-		errch := make(chan error, 1)
-		go func() {
-			errch <- s.connectPendingAndStream(streamCtx, provider)
-		}()
-
-		for {
-			select {
-			// 종료 신호
-			case <-ctx.Done():
-				cancel()
-				select {
-				case <-errch:
-				case <-time.After(time.Second):
-				}
-				return
-
-			// 주지적으로 provider 변경
-			case <-rotation.C:
-				nextProvider, ok := s.alternateProvider(provider.name)
-				if !ok {
-					continue
-				}
-				logger.Info(ctx, "rotating ethereum pending provider",
-					slog.String("system", "ethereum"),
-					slog.String("action", "rotate"),
-					slog.String("from", provider.name),
-					slog.String("to", nextProvider.name),
-				)
-
-				curProvider = nextProvider.name
-				// 동작중인 ws 종료 요청
-				cancel()
-
-				// ws 종료 신호대기 최대 1초 대기
-				select {
-				case <-errch:
-				case <-time.After(1 * time.Second):
-				}
-				continue session
-
-			// block ws 장애로 인한 provier 변경
-			case forced := <-s.pendingSwitch:
-				//이미 변경할 provider인 경우
-				if forced == provider.name {
-					continue
-				}
-
-				nextProvider, ok := s.provider(forced)
-				if !ok {
-					continue
-				}
-
+			nextSession, ok := s.handoverPending(ctx, session, nextProvider)
+			if ok {
 				logger.Info(
 					ctx,
 					"forcing pending provider switch",
 					slog.String("system", "ethereum"),
-					slog.String("action", "failover"),
-					slog.String("from", provider.name),
-					slog.String("to", nextProvider.name),
+					slog.String("action", "handover"),
+					slog.String("from", session.provider.name),
+					slog.String("to", nextSession.provider.name),
 				)
+				session = nextSession
+			}
 
-				curProvider = nextProvider.name
+		//ws 오류로 인해 종료된 경우
+		case err, ok := <-session.done:
+			if !ok {
+				continue
+			}
 
-				//동작 중인 ws 종료
-				cancel()
+			logger.Error(ctx, "ethereum pending subscription disconnect",
+				err,
+				slog.String("system", "ethereum"),
+				slog.String("action", "unsubscribe"),
+				slog.String("subscription", "PendingTx"),
+				slog.String("provider", session.provider.name),
+			)
 
-				select {
-				case <-errch:
-				case <-time.After(1 * time.Second):
-				}
-
-				continue session
-
-			//ws 오류로 인해 종료된 경우
-			case err := <-errch:
-				if ctx.Err() != nil {
-					cancel()
+			for {
+				nextProvider, ok := s.alternateProvider(session.provider.name)
+				if !ok {
 					return
 				}
 
-				logger.Error(ctx, "ethereum pending subscription failed",
-					err,
-					slog.String("system", "ethereum"),
-					slog.String("action", "disconnect"),
-					slog.String("subscription", "PendingTx"),
-					slog.String("provider", provider.name),
-				)
-
-				nextProvider, ok := s.alternateProvider(provider.name)
+				nextSession, ok := s.handoverPending(ctx, session, nextProvider)
 				if ok {
-					curProvider = nextProvider.name
+					session = nextSession
+					logger.Info(
+						ctx,
+						"ethereum pending subscription reconnect",
+						slog.String("system", "ethereum"),
+						slog.String("action", "subscribe"),
+						slog.String("provider", session.provider.name),
+					)
+					break
 				}
-
-				cancel()
-
-				timer := time.NewTimer(reconnectDelay)
 
 				select {
 				case <-ctx.Done():
-					timer.Stop()
 					return
-
-				case <-timer.C:
+				case <-time.After(3 * time.Second):
 				}
-				continue session
 			}
 		}
 	}
 }
 
-func (s *Subscriber) connectPendingAndStream(ctx context.Context, provider Provider) error {
-	client, err := rpc.DialContext(ctx, provider.url)
+func (s *Subscriber) handoverPending(ctx context.Context, old *pendingSession, firstProvider Provider) (*pendingSession, bool) {
+	provider := firstProvider
+
+	for i := 0; i < len(s.providers()); i++ {
+		if ctx.Err() != nil {
+			return old, false
+		}
+
+		nextSession, err := s.startPendingSession(ctx, provider)
+		if err == nil {
+			old.cancel()
+
+			select {
+			case <-old.done:
+			case <-time.After(1 * time.Second):
+			}
+			return nextSession, true
+		}
+
+		if ctx.Err() != nil {
+			return old, false
+		}
+
+		logger.Warn(ctx, "failed to subscribe pending",
+			slog.String("system", "ethereum"),
+			slog.String("action", "subscribe"),
+			slog.String("provider", provider.name),
+			slog.Any("error", err),
+		)
+
+		nextProvider, ok := s.alternateProvider(provider.name)
+		if !ok {
+			break
+		}
+		provider = nextProvider
+	}
+
+	return old, false
+}
+
+func (s *Subscriber) startPendingSession(ctx context.Context, provider Provider) (*pendingSession, error) {
+	streamCtx, cancel := context.WithCancel(ctx)
+
+	session := &pendingSession{
+		provider: provider,
+		cancel:   cancel,
+		ready:    make(chan struct{}),
+		done:     make(chan error, 1),
+	}
+
+	go func() {
+		session.done <- s.connectPendingAndStream(streamCtx, session)
+	}()
+
+	select {
+	case <-session.ready:
+		return session, nil
+
+	case err := <-session.done:
+		cancel()
+		return nil, err
+
+	case <-time.After(pendingReadyTimeout):
+		cancel()
+		return nil, errPendingSubscriptionTimeout
+
+	case <-ctx.Done():
+		cancel()
+		return nil, ctx.Err()
+	}
+}
+
+func (s *Subscriber) connectPendingAndStream(ctx context.Context, session *pendingSession) error {
+	client, err := rpc.DialContext(ctx, session.provider.url)
 	if err != nil {
-		return fmt.Errorf("failed to dial %s: %w", provider.name, err)
+		return err
 	}
 	defer client.Close()
 
@@ -169,8 +222,7 @@ func (s *Subscriber) connectPendingAndStream(ctx context.Context, provider Provi
 
 	sub, err := client.EthSubscribe(ctx, ch, "newPendingTransactions")
 	if err != nil {
-		return fmt.Errorf("failed to subscribe newPendingTransactions %s: %w",
-			provider.name, err)
+		return err
 	}
 	defer sub.Unsubscribe()
 
@@ -178,8 +230,11 @@ func (s *Subscriber) connectPendingAndStream(ctx context.Context, provider Provi
 		slog.String("system", "ethereum"),
 		slog.String("action", "subscribe"),
 		slog.String("subscription", "PendingTx"),
-		slog.String("provider", provider.name),
+		slog.String("provider", session.provider.name),
 	)
+
+	//연결 완료 ch
+	close(session.ready)
 
 	for {
 		select {
@@ -192,7 +247,11 @@ func (s *Subscriber) connectPendingAndStream(ctx context.Context, provider Provi
 			}
 			return err
 
-		case txHash := <-ch:
+		case txHash, ok := <-ch:
+			if !ok {
+				return errPendingChannelClose
+			}
+
 			if txHash == "" {
 				continue
 			}
@@ -207,10 +266,13 @@ func (s *Subscriber) connectPendingAndStream(ctx context.Context, provider Provi
 
 			select {
 			case s.txHashChan <- txHash:
+			case <-ctx.Done():
+				return ctx.Err()
 			default:
 				logger.Warn(ctx, "pending tx channel full, dropping tx",
-					slog.String("provider", string(provider.name)),
-					slog.String("hash", txHash),
+					slog.String("system", "ethereum"),
+					slog.String("action", "dropp"),
+					slog.String("tx hash", txHash),
 				)
 			}
 		}

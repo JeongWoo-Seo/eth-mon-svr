@@ -159,14 +159,6 @@ func (a *Analyzer) PendingPercentiles(poolData []WeightedTip) map[string]uint64 
 		return cmp.Compare(a.Tip, b.Tip)
 	})
 
-	// 최대 Tip 확인
-	logger.Warn(
-		context.Background(),
-		"pending tip statistics",
-		slog.String("system", "test"),
-		slog.Int("txCount", len(poolData)),
-		slog.Uint64("maxTip", poolData[len(poolData)-1].Tip),
-	)
 	//outer 계산
 	outer := calculateOuterBound(poolData)
 

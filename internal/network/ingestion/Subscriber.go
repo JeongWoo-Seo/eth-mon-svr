@@ -2,10 +2,8 @@ package ingestion
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
@@ -15,25 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-const (
-	pendingRotationInterval = 30 * time.Second
-	headerTimeout           = 30 * time.Second
-	watchdogInterval        = 10 * time.Second
-	reconnectDelay          = 1 * time.Second
-	txBufferSize            = 50000
-	headBufferSize          = 100
-)
-
-var (
-	errHeaderTimeout      = errors.New("ethereum header timeout")
-	errSubscriptionClosed = errors.New("ethereum subscription closed")
-)
-
-const (
-	ProviderAlchemy    string = "alchemy"
-	ProviderChainstack string = "chainstack"
-)
-
 type Subscriber struct {
 	AlcWsUrl      string
 	chaWsUrl      string
@@ -41,7 +20,6 @@ type Subscriber struct {
 	txHashChan    chan<- string
 	dedup         *mempool.Cache
 	wg            sync.WaitGroup
-	blockProvider atomic.Value
 	pendingSwitch chan string
 }
 
@@ -55,7 +33,6 @@ func NewSubscriber(alcUrl, chaUrl string, headerChan chan<- *types.Header, txHas
 		pendingSwitch: make(chan string, 4),
 	}
 
-	s.blockProvider.Store(ProviderAlchemy)
 	return s
 }
 
@@ -115,16 +92,35 @@ func (s *Subscriber) provider(name string) (Provider, bool) {
 }
 
 func (s *Subscriber) alternateProvider(name string) (Provider, bool) {
-	for _, p := range s.providers() {
-		if p.name != name {
-			if p.url == "" {
-				return Provider{}, false
-			}
+	providers := s.providers()
+	n := len(providers)
+	if n == 0 {
+		return Provider{}, false
+	}
 
-			return p, true
+	//시작 idx 찾기
+	curIdx := -1
+	for i, p := range s.providers() {
+		if p.name == name {
+			curIdx = i
+			break
 		}
 	}
 
+	if curIdx == -1 {
+		curIdx = 0
+	}
+
+	// 시작 idx부터 provider loop
+	for i := 1; i <= n; i++ {
+		nextIdx := (curIdx + i) % n
+		p := providers[nextIdx]
+
+		if p.name == name || p.url == "" {
+			continue
+		}
+		return p, true
+	}
 	return Provider{}, false
 }
 

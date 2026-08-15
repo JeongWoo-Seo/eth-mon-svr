@@ -47,15 +47,12 @@ func (s *Subscriber) runHeaderSub(ctx context.Context) {
 		)
 
 		//block ws 오류 시 provider 변경
-
 		nextProvider, ok := s.alternateProvider(provider.name)
 		if ok {
 			currentProvider = nextProvider.name
 
 			// block 변경을 pending 관리에 알림
 			s.notifyPendingSwitch(nextProvider.name)
-
-			s.blockProvider.Store(nextProvider.name)
 
 			logger.Info(
 				ctx,
