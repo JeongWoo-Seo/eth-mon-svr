@@ -76,25 +76,16 @@ func (r *RPCManager) Close() {
 	r.active = nil
 }
 
-func (r *RPCManager) EthClientFunc(
-	ctx context.Context,
-	fn func(client *ethclient.Client) error,
-) error {
-
+func (r *RPCManager) EthClientFunc(ctx context.Context, fn func(client *ethclient.Client) error) error {
 	now := time.Now()
 
 	r.mu.Lock()
-
-	if r.active == r.backup &&
-		!r.backupUntil.IsZero() &&
-		now.After(r.backupUntil) {
-
+	if r.active == r.backup && !r.backupUntil.IsZero() && now.After(r.backupUntil) {
 		r.active = r.primary
 		r.backupUntil = time.Time{}
 	}
 
 	client := r.active
-
 	r.mu.Unlock()
 
 	if client == nil || client.EthClient == nil {

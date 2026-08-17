@@ -54,10 +54,7 @@ func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions
 
 		totalCu := chunkSize * receiptCuPerTx
 		if err := p.limiter.WaitN(ctx, totalCu); err != nil {
-			logger.Error(ctx, "Rate limiter error in fetchReceiptsBatch",
-				err,
-				slog.Int("requested_cu", totalCu))
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrRateLimiterWait, err)
 		}
 
 		err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
@@ -92,10 +89,7 @@ func (p *Process) fetchBlockReceipts(ctx context.Context, blockNumberHex string)
 	var receipts []*types.Receipt
 
 	if err := p.limiter.WaitN(ctx, getBlockReceiptCu); err != nil {
-		logger.Error(ctx, "Rate limiter error in fetchReceiptsBatch",
-			err,
-			slog.Int("requested_cu", getBlockReceiptCu))
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrRateLimiterWait, err)
 	}
 
 	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {

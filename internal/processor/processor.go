@@ -2,10 +2,8 @@ package processor
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
@@ -37,9 +35,7 @@ type Process struct {
 
 	limiter *rate.Limiter
 
-	mu             sync.RWMutex
-	isFallbackMode bool
-	fallbackUntil  time.Time
+	mu sync.RWMutex
 }
 
 func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, rpcManager *rpcmanager.RPCManager,
@@ -85,11 +81,12 @@ func (p *Process) GetTxInfo(hashes []common.Hash) {
 		if err := p.limiter.WaitN(ctx, totalCu); err != nil {
 			logger.Error(ctx, "Rate limiter error in GetTxInfo",
 				err,
+				slog.String("system", "limiter"),
 				slog.Int("requested_cu", totalCu))
 			break
 		}
 
-		// 알케미 요청
+		// tx 정보 요청
 		err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
 			return client.Client().BatchCallContext(ctx, chunkElems)
 		})
@@ -188,42 +185,16 @@ func (p *Process) ProcessBlock(header *types.Header) {
 
 func (p *Process) Initialize(ctx context.Context) error {
 	// 최신 블록 조회
-	var header *types.Header
-	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
-		var err error
-		header, err = client.HeaderByNumber(ctx, nil)
-		return err
-	})
+	header, err := p.getLastestBlockHeader(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get latest block number: %w", err)
-	}
-
-	if header == nil {
-		return fmt.Errorf("Received nil block header")
-	}
-
-	if header.Number == nil {
-		return fmt.Errorf("Received block header with nil number")
+		return err
 	}
 
 	// receipt 조회
-	receipt, err := p.fetchBlockReceipts(ctx, header.Hash().Hex())
+	err = p.initialFromHeader(ctx, header)
 	if err != nil {
-		return fmt.Errorf("failed to fetch receipt: %w", err)
+		return err
 	}
-
-	if len(receipt) == 0 {
-		return fmt.Errorf("latest block has no receipts")
-	}
-
-	//block 데이터 생성
-	blockData := p.CalculateBlockTxTip(header, receipt)
-
-	// blockstore 저장
-	p.blockstore.AddBlock(blockData)
-
-	//분석을 위한 데이터 초기화
-	p.UpdateBlockInfoForAnalysis(header)
 
 	logger.Info(ctx, "Initialization completed",
 		slog.String("system", "ethereum"),

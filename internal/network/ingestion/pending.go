@@ -119,9 +119,7 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 				nextSession, ok := s.handoverPending(ctx, session, nextProvider)
 				if ok {
 					session = nextSession
-					logger.Info(
-						ctx,
-						"ethereum pending subscription reconnect",
+					logger.Info(ctx, "ethereum pending subscription reconnect",
 						slog.String("system", "ethereum"),
 						slog.String("action", "subscribe"),
 						slog.String("provider", session.provider.name),
