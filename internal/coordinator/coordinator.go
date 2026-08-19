@@ -13,10 +13,10 @@ type Coordinator struct {
 	block   *blockPipeline
 }
 
-func NewCoordinator(proc *processor.Process) *Coordinator {
+func NewCoordinator(proc *processor.Process, maxBlockCount int) *Coordinator {
 	return &Coordinator{
 		pending: newPendingPipeline(pendingWorkerCount, proc),
-		block:   newBlockPipeline(proc),
+		block:   newBlockPipeline(proc, maxBlockCount),
 	}
 }
 

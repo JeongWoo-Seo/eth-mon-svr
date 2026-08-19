@@ -16,7 +16,6 @@ const (
 	failedBlockBufferSize = 10
 	retryCount            = 3
 	retryDelay            = 300 * time.Millisecond
-	maxBlockLag           = 10
 	wakeupBufferSize      = 1
 )
 
@@ -34,6 +33,7 @@ type blockPipeline struct {
 	headerChan      chan *types.Header
 	failedBlockChan chan *types.Header
 	wakeupChan      chan struct{}
+	maxBlockLag     uint64
 
 	nextBlockNum uint64
 	pendingBlock map[uint64]*types.Header
@@ -42,13 +42,14 @@ type blockPipeline struct {
 	mu sync.Mutex
 }
 
-func newBlockPipeline(proc *processor.Process) *blockPipeline {
+func newBlockPipeline(proc *processor.Process, maxBlockCount int) *blockPipeline {
 	return &blockPipeline{
 		headerChan:      make(chan *types.Header, headBufferSize),
 		failedBlockChan: make(chan *types.Header, failedBlockBufferSize),
 		wakeupChan:      make(chan struct{}, wakeupBufferSize),
 		pendingBlock:    make(map[uint64]*types.Header),
 		proc:            proc,
+		maxBlockLag:     uint64(maxBlockCount),
 	}
 }
 
@@ -227,7 +228,7 @@ func (b *blockPipeline) checkBlockGap(ctx context.Context) {
 	gap := highest - nextBlock
 
 	//블록이 너무 많이 밀렸을 때 block과 pending tx 정보를 정리
-	if gap >= maxBlockLag {
+	if gap >= b.maxBlockLag {
 		logger.Warn(ctx, "block lag exceeded maximum threshold, starting resync",
 			slog.String("system", "blockpipeline"),
 			slog.Uint64("gap", gap),

@@ -9,21 +9,20 @@ import (
 )
 
 type Config struct {
-	Service           string  `mapstructure:"SERVICE"`
-	Env               string  `mapstructure:"ENV"`
-	ServerPort        string  `mapstructure:"SERVER_PORT"`
-	GrpcServerAddr    string  `mapstructure:"GRPC_SERVER_ADDR"`
-	EthSepoliaChainId string  `mapstructure:"ETH_SEPOLIA_CHAIN_ID"`
-	EthAlcRpcHttpUrl  string  `mapstructure:"ETH_ALC_RPC_HTTP_URL"`
-	EthAlcRpcWsUrl    string  `mapstructure:"ETH_ALC_RPC_WS_URL"`
-	EthInfRpcHttpUrl  string  `mapstructure:"ETH_INF_RPC_HTTP_URL"`
-	EthInfRpcWsUrl    string  `mapstructure:"ETH_INF_RPC_WS_URL"`
-	EthChaRpcHttpUrl  string  `mapstructure:"ETH_CHA_RPC_HTTP_URL"`
-	EthChaRpcWsUrl    string  `mapstructure:"ETH_CHA_RPC_WS_URL"`
-	WorkerCount       int     `mapstructure:"WORKER_COUNT"`
-	TxStoreBlockTTL   uint64  `mapstructure:"TX_STORE_BLOCK_TTL"`
-	MaxBlockCount     int     `mapstructure:"MAX_BLOCK_COUNT"`
-	Lamda             float64 `mapstructure:"LAMDA"`
+	Service           string `mapstructure:"SERVICE"`
+	Env               string `mapstructure:"ENV"`
+	ServerPort        string `mapstructure:"SERVER_PORT"`
+	GrpcServerAddr    string `mapstructure:"GRPC_SERVER_ADDR"`
+	EthSepoliaChainId string `mapstructure:"ETH_SEPOLIA_CHAIN_ID"`
+	EthAlcRpcHttpUrl  string `mapstructure:"ETH_ALC_RPC_HTTP_URL"`
+	EthAlcRpcWsUrl    string `mapstructure:"ETH_ALC_RPC_WS_URL"`
+	EthInfRpcHttpUrl  string `mapstructure:"ETH_INF_RPC_HTTP_URL"`
+	EthInfRpcWsUrl    string `mapstructure:"ETH_INF_RPC_WS_URL"`
+	EthChaRpcHttpUrl  string `mapstructure:"ETH_CHA_RPC_HTTP_URL"`
+	EthChaRpcWsUrl    string `mapstructure:"ETH_CHA_RPC_WS_URL"`
+	WorkerCount       int    `mapstructure:"WORKER_COUNT"`
+	TxStoreBlockTTL   uint64 `mapstructure:"TX_STORE_BLOCK_TTL"`
+	MaxBlockCount     int    `mapstructure:"MAX_BLOCK_COUNT"`
 }
 
 func LoadConfig() *Config {

@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	MaxAge = 20
+	MaxAge         = 20
+	lamda  float64 = 0.7
 )
 
 type Analyzer struct {
@@ -34,7 +35,7 @@ type Analyzer struct {
 	grpcClient  *grpcClient.GasPredictionClient
 }
 
-func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, grpcClient *grpcClient.GasPredictionClient) *Analyzer {
+func NewAnalyzer(pendingPool *mempool.PendingMemPool, grpcClient *grpcClient.GasPredictionClient) *Analyzer {
 	a := &Analyzer{
 		ready:       false,
 		pendingPool: pendingPool,

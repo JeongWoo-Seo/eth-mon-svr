@@ -92,9 +92,9 @@ func main() {
 	//////////////////////////
 	// start processor
 	//////////////////////////
-	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, grpcClient)
+	analyzer := gasanalyzer.NewAnalyzer(pendingPool, grpcClient)
 	proc := processor.NewProcess(pendingPool, blockPool, rpcManager, analyzer, grpcClient)
-	coor := coordinator.NewCoordinator(proc)
+	coor := coordinator.NewCoordinator(proc, cfg.MaxBlockCount)
 	coor.Start(ctx)
 
 	report.StartReporter(ctx)
