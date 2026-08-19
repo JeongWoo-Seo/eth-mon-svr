@@ -35,6 +35,15 @@ func NewPendingMemPool(chainID string, ttlblock uint64) (*PendingMemPool, error)
 	}, nil
 }
 
+func (pool *PendingMemPool) Clear() {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	pool.Accounts = make(map[common.Address]*AccountPending)
+	pool.ExpireBuckets = make(map[uint64][]*PendingTx)
+	pool.HashIndex = make(map[common.Hash]*PendingTx)
+}
+
 func (pool *PendingMemPool) PushBatch(txs []*types.Transaction, currentBlockNum, curBlockTime uint64) {
 	if len(txs) == 0 {
 		return

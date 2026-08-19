@@ -124,15 +124,7 @@ func (s *Subscriber) connectHeadAndStream(ctx context.Context, provider Provider
 			}
 
 			lastHeaderAt = time.Now()
-
-			select {
-			case s.headerChan <- header:
-			default:
-				logger.Warn(ctx, "header channel full, dropping header",
-					slog.String("provider", provider.name),
-					slog.Uint64("block_number", header.Number.Uint64()),
-				)
-			}
+			s.coor.PushHeader(header)
 
 		case <-watchdog.C:
 			if time.Since(lastHeaderAt) >= headerTimeout {

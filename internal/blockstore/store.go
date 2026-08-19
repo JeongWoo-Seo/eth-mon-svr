@@ -17,6 +17,13 @@ func NewBlockStore(maxSize int) *Store {
 	}
 }
 
+func (s *Store) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.blocks = make([]BlockData, 0, s.max)
+}
+
 func (s *Store) AddBlock(blockData BlockData) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

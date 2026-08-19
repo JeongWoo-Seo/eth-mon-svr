@@ -6,29 +6,27 @@ import (
 	"sync"
 	"time"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/coordinator"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type Subscriber struct {
 	AlcWsUrl      string
 	chaWsUrl      string
-	headerChan    chan<- *types.Header
-	txHashChan    chan<- string
+	coor          *coordinator.Coordinator
 	dedup         *mempool.Cache
 	wg            sync.WaitGroup
 	pendingSwitch chan string
 }
 
-func NewSubscriber(alcUrl, chaUrl string, headerChan chan<- *types.Header, txHashChan chan<- string, dedup *mempool.Cache) *Subscriber {
+func NewSubscriber(alcUrl, chaUrl string, coor *coordinator.Coordinator, dedup *mempool.Cache) *Subscriber {
 	s := &Subscriber{
 		AlcWsUrl:      alcUrl,
 		chaWsUrl:      chaUrl,
-		headerChan:    headerChan,
-		txHashChan:    txHashChan,
+		coor:          coor,
 		dedup:         dedup,
 		pendingSwitch: make(chan string, 4),
 	}

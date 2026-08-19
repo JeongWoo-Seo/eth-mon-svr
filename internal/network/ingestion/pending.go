@@ -7,6 +7,7 @@ import (
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -216,7 +217,7 @@ func (s *Subscriber) connectPendingAndStream(ctx context.Context, session *pendi
 	}
 	defer client.Close()
 
-	ch := make(chan string, txBufferSize)
+	ch := make(chan common.Hash, txBufferSize)
 
 	sub, err := client.EthSubscribe(ctx, ch, "newPendingTransactions")
 	if err != nil {
@@ -250,29 +251,19 @@ func (s *Subscriber) connectPendingAndStream(ctx context.Context, session *pendi
 				return errPendingChannelClose
 			}
 
-			if txHash == "" {
+			if txHash == (common.Hash{}) {
 				continue
 			}
 
 			report.IncPendginRecieved()
 
 			if s.dedup != nil {
-				if s.dedup.Seen(txHash) {
+				if s.dedup.Seen(txHash.Hex()) {
 					continue
 				}
 			}
 
-			select {
-			case s.txHashChan <- txHash:
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				logger.Warn(ctx, "pending tx channel full, dropping tx",
-					slog.String("system", "ethereum"),
-					slog.String("action", "dropp"),
-					slog.String("tx hash", txHash),
-				)
-			}
+			s.coor.PushTxHash(txHash)
 		}
 	}
 }

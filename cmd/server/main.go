@@ -10,6 +10,7 @@ import (
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/coordinator"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/grpcClient"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/ingestion"
 	rpcmanager "github.com/JeongWoo-Seo/eth-mon-svr/internal/network/rpcManager"
@@ -20,7 +21,6 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/processor"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/worker"
 )
 
 func main() {
@@ -94,25 +94,15 @@ func main() {
 	//////////////////////////
 	analyzer := gasanalyzer.NewAnalyzer(cfg.Lamda, pendingPool, grpcClient)
 	proc := processor.NewProcess(pendingPool, blockPool, rpcManager, analyzer, grpcClient)
-	pendingWorker := worker.NewPendingWorker(cfg.WorkerCount, proc)
-	pendingWorker.Start(ctx)
-
-	blockWorker := worker.NewBlockWorker(proc)
-	blockWorker.Start(ctx)
-
-	if err := proc.Initialize(ctx); err != nil {
-		logger.Error(ctx, "failed to initialize block info",
-			err,
-			slog.String("system", "process"))
-		panic(err)
-	}
+	coor := coordinator.NewCoordinator(proc)
+	coor.Start(ctx)
 
 	report.StartReporter(ctx)
 
 	//////////////////////////
 	// subscribe eth
 	//////////////////////////
-	sub := ingestion.NewSubscriber(cfg.EthAlcRpcWsUrl, cfg.EthChaRpcWsUrl, blockWorker.Input(), pendingWorker.Input(), dedup)
+	sub := ingestion.NewSubscriber(cfg.EthAlcRpcWsUrl, cfg.EthChaRpcWsUrl, coor, dedup)
 	sub.SubscriberStart(ctx)
 
 	//////////////////////////
@@ -128,8 +118,7 @@ func main() {
 	logger.Info(context.Background(), "shutdown requested")
 
 	sub.Wait()
-	pendingWorker.Wait()
-	blockWorker.Wait()
+	coor.Stop()
 
 	logger.Info(context.Background(), "Shutting down server...")
 }

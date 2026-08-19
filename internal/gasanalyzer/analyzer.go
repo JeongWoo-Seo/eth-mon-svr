@@ -22,10 +22,13 @@ const (
 )
 
 type Analyzer struct {
-	DecayTable      [MaxAge + 1]float64
-	mu              sync.RWMutex
+	DecayTable [MaxAge + 1]float64
+	mu         sync.RWMutex
+	runMu      sync.Mutex // 분석 작업과 Clear/Resync의 lifecycle 보호
+
 	latestResult    GasPrediction
 	latestBlockData BlockAnalysisData
+	ready           bool
 
 	pendingPool *mempool.PendingMemPool
 	grpcClient  *grpcClient.GasPredictionClient
@@ -33,6 +36,7 @@ type Analyzer struct {
 
 func NewAnalyzer(lamda float64, pendingPool *mempool.PendingMemPool, grpcClient *grpcClient.GasPredictionClient) *Analyzer {
 	a := &Analyzer{
+		ready:       false,
 		pendingPool: pendingPool,
 		grpcClient:  grpcClient,
 	}
@@ -60,8 +64,30 @@ func (a *Analyzer) Start(ctx context.Context) {
 	}
 }
 
+func (a *Analyzer) Reset() {
+	a.runMu.Lock()
+	defer a.runMu.Unlock()
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.ready = false
+	a.latestResult = GasPrediction{}
+	a.latestBlockData = BlockAnalysisData{}
+}
+
+func (a *Analyzer) SetReady() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.ready = true
+}
+
 func (a *Analyzer) AnalyzeGasPrice() {
+	a.runMu.Lock()
+	defer a.runMu.Unlock()
+
 	a.mu.RLock()
+	ready := a.ready
 	nextBlockNum := a.latestBlockData.BlockNumber + 1
 	nextBaseFee := a.latestBlockData.NextBaseFee
 	baseFee := a.latestBlockData.BaseFee
@@ -70,7 +96,7 @@ func (a *Analyzer) AnalyzeGasPrice() {
 	cutoff := a.latestBlockData.Cutoff
 	a.mu.RUnlock()
 
-	if nextBlockNum == 1 {
+	if !ready {
 		logger.Warn(context.Background(), "not yet ready to analyze",
 			slog.String("system", "analysis"),
 		)
@@ -310,8 +336,8 @@ func (a *Analyzer) UpdateAnalPendingTxPredictionGasResult(result map[string]uint
 }
 
 func (a *Analyzer) GetCurrentBlockNumAndTime() (uint64, uint64) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 
 	return a.latestBlockData.BlockNumber, a.latestBlockData.BlockTime
 }
