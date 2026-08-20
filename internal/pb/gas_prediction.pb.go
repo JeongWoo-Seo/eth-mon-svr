@@ -22,6 +22,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type GapEvent_Reason int32
+
+const (
+	GapEvent_UNKNOW         GapEvent_Reason = 0
+	GapEvent_RECONNECT      GapEvent_Reason = 1
+	GapEvent_WS_DISCONECTED GapEvent_Reason = 2
+)
+
+// Enum value maps for GapEvent_Reason.
+var (
+	GapEvent_Reason_name = map[int32]string{
+		0: "UNKNOW",
+		1: "RECONNECT",
+		2: "WS_DISCONECTED",
+	}
+	GapEvent_Reason_value = map[string]int32{
+		"UNKNOW":         0,
+		"RECONNECT":      1,
+		"WS_DISCONECTED": 2,
+	}
+)
+
+func (x GapEvent_Reason) Enum() *GapEvent_Reason {
+	p := new(GapEvent_Reason)
+	*p = x
+	return p
+}
+
+func (x GapEvent_Reason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GapEvent_Reason) Descriptor() protoreflect.EnumDescriptor {
+	return file_gas_prediction_proto_enumTypes[0].Descriptor()
+}
+
+func (GapEvent_Reason) Type() protoreflect.EnumType {
+	return &file_gas_prediction_proto_enumTypes[0]
+}
+
+func (x GapEvent_Reason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GapEvent_Reason.Descriptor instead.
+func (GapEvent_Reason) EnumDescriptor() ([]byte, []int) {
+	return file_gas_prediction_proto_rawDescGZIP(), []int{3, 0}
+}
+
 type GasLevel struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PriorityFee   uint64                 `protobuf:"varint,1,opt,name=priority_fee,json=priorityFee,proto3" json:"priority_fee,omitempty"`
@@ -74,6 +123,88 @@ func (x *GasLevel) GetMaxFee() uint64 {
 	return 0
 }
 
+type GasPredictionStream struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Event:
+	//
+	//	*GasPredictionStream_Prediction
+	//	*GasPredictionStream_Gap
+	Event         isGasPredictionStream_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GasPredictionStream) Reset() {
+	*x = GasPredictionStream{}
+	mi := &file_gas_prediction_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GasPredictionStream) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GasPredictionStream) ProtoMessage() {}
+
+func (x *GasPredictionStream) ProtoReflect() protoreflect.Message {
+	mi := &file_gas_prediction_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GasPredictionStream.ProtoReflect.Descriptor instead.
+func (*GasPredictionStream) Descriptor() ([]byte, []int) {
+	return file_gas_prediction_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GasPredictionStream) GetEvent() isGasPredictionStream_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *GasPredictionStream) GetPrediction() *GasPredictionRequest {
+	if x != nil {
+		if x, ok := x.Event.(*GasPredictionStream_Prediction); ok {
+			return x.Prediction
+		}
+	}
+	return nil
+}
+
+func (x *GasPredictionStream) GetGap() *GapEvent {
+	if x != nil {
+		if x, ok := x.Event.(*GasPredictionStream_Gap); ok {
+			return x.Gap
+		}
+	}
+	return nil
+}
+
+type isGasPredictionStream_Event interface {
+	isGasPredictionStream_Event()
+}
+
+type GasPredictionStream_Prediction struct {
+	Prediction *GasPredictionRequest `protobuf:"bytes,1,opt,name=prediction,proto3,oneof"`
+}
+
+type GasPredictionStream_Gap struct {
+	Gap *GapEvent `protobuf:"bytes,2,opt,name=gap,proto3,oneof"`
+}
+
+func (*GasPredictionStream_Prediction) isGasPredictionStream_Event() {}
+
+func (*GasPredictionStream_Gap) isGasPredictionStream_Event() {}
+
 type GasPredictionRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	NextBlockNumber uint64                 `protobuf:"varint,1,opt,name=next_block_number,json=nextBlockNumber,proto3" json:"next_block_number,omitempty"`
@@ -86,7 +217,7 @@ type GasPredictionRequest struct {
 
 func (x *GasPredictionRequest) Reset() {
 	*x = GasPredictionRequest{}
-	mi := &file_gas_prediction_proto_msgTypes[1]
+	mi := &file_gas_prediction_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -98,7 +229,7 @@ func (x *GasPredictionRequest) String() string {
 func (*GasPredictionRequest) ProtoMessage() {}
 
 func (x *GasPredictionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gas_prediction_proto_msgTypes[1]
+	mi := &file_gas_prediction_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -111,7 +242,7 @@ func (x *GasPredictionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GasPredictionRequest.ProtoReflect.Descriptor instead.
 func (*GasPredictionRequest) Descriptor() ([]byte, []int) {
-	return file_gas_prediction_proto_rawDescGZIP(), []int{1}
+	return file_gas_prediction_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GasPredictionRequest) GetNextBlockNumber() uint64 {
@@ -142,17 +273,86 @@ func (x *GasPredictionRequest) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+type GapEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FromBlock     uint64                 `protobuf:"varint,1,opt,name=from_block,json=fromBlock,proto3" json:"from_block,omitempty"`
+	ToBlock       uint64                 `protobuf:"varint,2,opt,name=to_block,json=toBlock,proto3" json:"to_block,omitempty"`
+	DetectedAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=detected_at,json=detectedAt,proto3" json:"detected_at,omitempty"`
+	Reason        GapEvent_Reason        `protobuf:"varint,4,opt,name=reason,proto3,enum=gas_monitoring.GapEvent_Reason" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GapEvent) Reset() {
+	*x = GapEvent{}
+	mi := &file_gas_prediction_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GapEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GapEvent) ProtoMessage() {}
+
+func (x *GapEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_gas_prediction_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GapEvent.ProtoReflect.Descriptor instead.
+func (*GapEvent) Descriptor() ([]byte, []int) {
+	return file_gas_prediction_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GapEvent) GetFromBlock() uint64 {
+	if x != nil {
+		return x.FromBlock
+	}
+	return 0
+}
+
+func (x *GapEvent) GetToBlock() uint64 {
+	if x != nil {
+		return x.ToBlock
+	}
+	return 0
+}
+
+func (x *GapEvent) GetDetectedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DetectedAt
+	}
+	return nil
+}
+
+func (x *GapEvent) GetReason() GapEvent_Reason {
+	if x != nil {
+		return x.Reason
+	}
+	return GapEvent_UNKNOW
+}
+
 type GasPredictionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=Success,proto3" json:"Success,omitempty"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	AckBlock      uint64                 `protobuf:"varint,3,opt,name=ack_block,json=ackBlock,proto3" json:"ack_block,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GasPredictionResponse) Reset() {
 	*x = GasPredictionResponse{}
-	mi := &file_gas_prediction_proto_msgTypes[2]
+	mi := &file_gas_prediction_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -164,7 +364,7 @@ func (x *GasPredictionResponse) String() string {
 func (*GasPredictionResponse) ProtoMessage() {}
 
 func (x *GasPredictionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gas_prediction_proto_msgTypes[2]
+	mi := &file_gas_prediction_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -177,7 +377,7 @@ func (x *GasPredictionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GasPredictionResponse.ProtoReflect.Descriptor instead.
 func (*GasPredictionResponse) Descriptor() ([]byte, []int) {
-	return file_gas_prediction_proto_rawDescGZIP(), []int{2}
+	return file_gas_prediction_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GasPredictionResponse) GetSuccess() bool {
@@ -194,6 +394,13 @@ func (x *GasPredictionResponse) GetMessage() string {
 	return ""
 }
 
+func (x *GasPredictionResponse) GetAckBlock() uint64 {
+	if x != nil {
+		return x.AckBlock
+	}
+	return 0
+}
+
 var File_gas_prediction_proto protoreflect.FileDescriptor
 
 const file_gas_prediction_proto_rawDesc = "" +
@@ -201,7 +408,13 @@ const file_gas_prediction_proto_rawDesc = "" +
 	"\x14gas_prediction.proto\x12\x0egas_monitoring\x1a\x1fgoogle/protobuf/timestamp.proto\"F\n" +
 	"\bGasLevel\x12!\n" +
 	"\fpriority_fee\x18\x01 \x01(\x04R\vpriorityFee\x12\x17\n" +
-	"\amax_fee\x18\x02 \x01(\x04R\x06maxFee\"\xdd\x02\n" +
+	"\amax_fee\x18\x02 \x01(\x04R\x06maxFee\"\x94\x01\n" +
+	"\x13GasPredictionStream\x12F\n" +
+	"\n" +
+	"prediction\x18\x01 \x01(\v2$.gas_monitoring.GasPredictionRequestH\x00R\n" +
+	"prediction\x12,\n" +
+	"\x03gap\x18\x02 \x01(\v2\x18.gas_monitoring.GapEventH\x00R\x03gapB\a\n" +
+	"\x05event\"\xdd\x02\n" +
 	"\x14GasPredictionRequest\x12*\n" +
 	"\x11next_block_number\x18\x01 \x01(\x04R\x0fnextBlockNumber\x12\"\n" +
 	"\rnext_base_fee\x18\x02 \x01(\x04R\vnextBaseFee\x12^\n" +
@@ -210,10 +423,23 @@ const file_gas_prediction_proto_rawDesc = "" +
 	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1aZ\n" +
 	"\x12PredictResultEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12.\n" +
-	"\x05value\x18\x02 \x01(\v2\x18.gas_monitoring.GasLevelR\x05value:\x028\x01\"K\n" +
+	"\x05value\x18\x02 \x01(\v2\x18.gas_monitoring.GasLevelR\x05value:\x028\x01\"\xf3\x01\n" +
+	"\bGapEvent\x12\x1d\n" +
+	"\n" +
+	"from_block\x18\x01 \x01(\x04R\tfromBlock\x12\x19\n" +
+	"\bto_block\x18\x02 \x01(\x04R\atoBlock\x12;\n" +
+	"\vdetected_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"detectedAt\x127\n" +
+	"\x06reason\x18\x04 \x01(\x0e2\x1f.gas_monitoring.GapEvent.ReasonR\x06reason\"7\n" +
+	"\x06Reason\x12\n" +
+	"\n" +
+	"\x06UNKNOW\x10\x00\x12\r\n" +
+	"\tRECONNECT\x10\x01\x12\x12\n" +
+	"\x0eWS_DISCONECTED\x10\x02\"h\n" +
 	"\x15GasPredictionResponse\x12\x18\n" +
-	"\aSuccess\x18\x01 \x01(\bR\aSuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessageB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1b\n" +
+	"\tack_block\x18\x03 \x01(\x04R\backBlockB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
 
 var (
 	file_gas_prediction_proto_rawDescOnce sync.Once
@@ -227,23 +453,31 @@ func file_gas_prediction_proto_rawDescGZIP() []byte {
 	return file_gas_prediction_proto_rawDescData
 }
 
-var file_gas_prediction_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_gas_prediction_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_gas_prediction_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_gas_prediction_proto_goTypes = []any{
-	(*GasLevel)(nil),              // 0: gas_monitoring.GasLevel
-	(*GasPredictionRequest)(nil),  // 1: gas_monitoring.GasPredictionRequest
-	(*GasPredictionResponse)(nil), // 2: gas_monitoring.GasPredictionResponse
-	nil,                           // 3: gas_monitoring.GasPredictionRequest.PredictResultEntry
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(GapEvent_Reason)(0),          // 0: gas_monitoring.GapEvent.Reason
+	(*GasLevel)(nil),              // 1: gas_monitoring.GasLevel
+	(*GasPredictionStream)(nil),   // 2: gas_monitoring.GasPredictionStream
+	(*GasPredictionRequest)(nil),  // 3: gas_monitoring.GasPredictionRequest
+	(*GapEvent)(nil),              // 4: gas_monitoring.GapEvent
+	(*GasPredictionResponse)(nil), // 5: gas_monitoring.GasPredictionResponse
+	nil,                           // 6: gas_monitoring.GasPredictionRequest.PredictResultEntry
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
 }
 var file_gas_prediction_proto_depIdxs = []int32{
-	3, // 0: gas_monitoring.GasPredictionRequest.predict_result:type_name -> gas_monitoring.GasPredictionRequest.PredictResultEntry
-	4, // 1: gas_monitoring.GasPredictionRequest.updated_at:type_name -> google.protobuf.Timestamp
-	0, // 2: gas_monitoring.GasPredictionRequest.PredictResultEntry.value:type_name -> gas_monitoring.GasLevel
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 0: gas_monitoring.GasPredictionStream.prediction:type_name -> gas_monitoring.GasPredictionRequest
+	4, // 1: gas_monitoring.GasPredictionStream.gap:type_name -> gas_monitoring.GapEvent
+	6, // 2: gas_monitoring.GasPredictionRequest.predict_result:type_name -> gas_monitoring.GasPredictionRequest.PredictResultEntry
+	7, // 3: gas_monitoring.GasPredictionRequest.updated_at:type_name -> google.protobuf.Timestamp
+	7, // 4: gas_monitoring.GapEvent.detected_at:type_name -> google.protobuf.Timestamp
+	0, // 5: gas_monitoring.GapEvent.reason:type_name -> gas_monitoring.GapEvent.Reason
+	1, // 6: gas_monitoring.GasPredictionRequest.PredictResultEntry.value:type_name -> gas_monitoring.GasLevel
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_gas_prediction_proto_init() }
@@ -251,18 +485,23 @@ func file_gas_prediction_proto_init() {
 	if File_gas_prediction_proto != nil {
 		return
 	}
+	file_gas_prediction_proto_msgTypes[1].OneofWrappers = []any{
+		(*GasPredictionStream_Prediction)(nil),
+		(*GasPredictionStream_Gap)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gas_prediction_proto_rawDesc), len(file_gas_prediction_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   4,
+			NumEnums:      1,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_gas_prediction_proto_goTypes,
 		DependencyIndexes: file_gas_prediction_proto_depIdxs,
+		EnumInfos:         file_gas_prediction_proto_enumTypes,
 		MessageInfos:      file_gas_prediction_proto_msgTypes,
 	}.Build()
 	File_gas_prediction_proto = out.File

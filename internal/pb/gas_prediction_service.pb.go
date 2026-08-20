@@ -80,9 +80,9 @@ const file_gas_prediction_service_proto_rawDesc = "" +
 	"\x1cgas_prediction_service.proto\x12\x0egas_monitoring\x1a\x14gas_prediction.proto\x1a\x10fee_bucket.proto\"D\n" +
 	"\x0eCommonResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\xd7\x01\n" +
-	"\x14GasPredictionService\x12e\n" +
-	"\x14UploadGasPredictions\x12$.gas_monitoring.GasPredictionRequest\x1a%.gas_monitoring.GasPredictionResponse(\x01\x12X\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\xd8\x01\n" +
+	"\x14GasPredictionService\x12f\n" +
+	"\x14UploadGasPredictions\x12#.gas_monitoring.GasPredictionStream\x1a%.gas_monitoring.GasPredictionResponse(\x010\x01\x12X\n" +
 	"\x10UploadFeeBuckets\x12$.gas_monitoring.FeeStatisticsRequest\x1a\x1e.gas_monitoring.CommonResponseB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
 
 var (
@@ -100,12 +100,12 @@ func file_gas_prediction_service_proto_rawDescGZIP() []byte {
 var file_gas_prediction_service_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gas_prediction_service_proto_goTypes = []any{
 	(*CommonResponse)(nil),        // 0: gas_monitoring.CommonResponse
-	(*GasPredictionRequest)(nil),  // 1: gas_monitoring.GasPredictionRequest
+	(*GasPredictionStream)(nil),   // 1: gas_monitoring.GasPredictionStream
 	(*FeeStatisticsRequest)(nil),  // 2: gas_monitoring.FeeStatisticsRequest
 	(*GasPredictionResponse)(nil), // 3: gas_monitoring.GasPredictionResponse
 }
 var file_gas_prediction_service_proto_depIdxs = []int32{
-	1, // 0: gas_monitoring.GasPredictionService.UploadGasPredictions:input_type -> gas_monitoring.GasPredictionRequest
+	1, // 0: gas_monitoring.GasPredictionService.UploadGasPredictions:input_type -> gas_monitoring.GasPredictionStream
 	2, // 1: gas_monitoring.GasPredictionService.UploadFeeBuckets:input_type -> gas_monitoring.FeeStatisticsRequest
 	3, // 2: gas_monitoring.GasPredictionService.UploadGasPredictions:output_type -> gas_monitoring.GasPredictionResponse
 	0, // 3: gas_monitoring.GasPredictionService.UploadFeeBuckets:output_type -> gas_monitoring.CommonResponse

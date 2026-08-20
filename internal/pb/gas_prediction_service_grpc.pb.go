@@ -27,7 +27,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GasPredictionServiceClient interface {
-	UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse], error)
+	UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[GasPredictionStream, GasPredictionResponse], error)
 	UploadFeeBuckets(ctx context.Context, in *FeeStatisticsRequest, opts ...grpc.CallOption) (*CommonResponse, error)
 }
 
@@ -39,18 +39,18 @@ func NewGasPredictionServiceClient(cc grpc.ClientConnInterface) GasPredictionSer
 	return &gasPredictionServiceClient{cc}
 }
 
-func (c *gasPredictionServiceClient) UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse], error) {
+func (c *gasPredictionServiceClient) UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[GasPredictionStream, GasPredictionResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &GasPredictionService_ServiceDesc.Streams[0], GasPredictionService_UploadGasPredictions_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[GasPredictionRequest, GasPredictionResponse]{ClientStream: stream}
+	x := &grpc.GenericClientStream[GasPredictionStream, GasPredictionResponse]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type GasPredictionService_UploadGasPredictionsClient = grpc.ClientStreamingClient[GasPredictionRequest, GasPredictionResponse]
+type GasPredictionService_UploadGasPredictionsClient = grpc.BidiStreamingClient[GasPredictionStream, GasPredictionResponse]
 
 func (c *gasPredictionServiceClient) UploadFeeBuckets(ctx context.Context, in *FeeStatisticsRequest, opts ...grpc.CallOption) (*CommonResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -66,7 +66,7 @@ func (c *gasPredictionServiceClient) UploadFeeBuckets(ctx context.Context, in *F
 // All implementations must embed UnimplementedGasPredictionServiceServer
 // for forward compatibility.
 type GasPredictionServiceServer interface {
-	UploadGasPredictions(grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]) error
+	UploadGasPredictions(grpc.BidiStreamingServer[GasPredictionStream, GasPredictionResponse]) error
 	UploadFeeBuckets(context.Context, *FeeStatisticsRequest) (*CommonResponse, error)
 	mustEmbedUnimplementedGasPredictionServiceServer()
 }
@@ -78,7 +78,7 @@ type GasPredictionServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedGasPredictionServiceServer struct{}
 
-func (UnimplementedGasPredictionServiceServer) UploadGasPredictions(grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]) error {
+func (UnimplementedGasPredictionServiceServer) UploadGasPredictions(grpc.BidiStreamingServer[GasPredictionStream, GasPredictionResponse]) error {
 	return status.Error(codes.Unimplemented, "method UploadGasPredictions not implemented")
 }
 func (UnimplementedGasPredictionServiceServer) UploadFeeBuckets(context.Context, *FeeStatisticsRequest) (*CommonResponse, error) {
@@ -106,11 +106,11 @@ func RegisterGasPredictionServiceServer(s grpc.ServiceRegistrar, srv GasPredicti
 }
 
 func _GasPredictionService_UploadGasPredictions_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(GasPredictionServiceServer).UploadGasPredictions(&grpc.GenericServerStream[GasPredictionRequest, GasPredictionResponse]{ServerStream: stream})
+	return srv.(GasPredictionServiceServer).UploadGasPredictions(&grpc.GenericServerStream[GasPredictionStream, GasPredictionResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type GasPredictionService_UploadGasPredictionsServer = grpc.ClientStreamingServer[GasPredictionRequest, GasPredictionResponse]
+type GasPredictionService_UploadGasPredictionsServer = grpc.BidiStreamingServer[GasPredictionStream, GasPredictionResponse]
 
 func _GasPredictionService_UploadFeeBuckets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FeeStatisticsRequest)
@@ -146,6 +146,7 @@ var GasPredictionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "UploadGasPredictions",
 			Handler:       _GasPredictionService_UploadGasPredictions_Handler,
+			ServerStreams: true,
 			ClientStreams: true,
 		},
 	},

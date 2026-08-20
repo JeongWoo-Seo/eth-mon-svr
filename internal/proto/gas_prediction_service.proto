@@ -8,7 +8,7 @@ import "gas_prediction.proto";
 import "fee_bucket.proto";
 
 service GasPredictionService {
-    rpc UploadGasPredictions(stream GasPredictionRequest) returns (GasPredictionResponse);
+    rpc UploadGasPredictions(stream GasPredictionStream) returns (stream GasPredictionResponse);
 
     rpc UploadFeeBuckets(FeeStatisticsRequest) returns (CommonResponse);
 }

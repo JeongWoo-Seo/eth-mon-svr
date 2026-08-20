@@ -11,6 +11,13 @@ message GasLevel {
     uint64 max_fee = 2;
 }
 
+message GasPredictionStream {
+    oneof event {
+        GasPredictionRequest prediction = 1;
+        GapEvent gap = 2;
+    }
+}
+
 message GasPredictionRequest {
     uint64 next_block_number = 1;
     uint64 next_base_fee = 2;
@@ -18,7 +25,22 @@ message GasPredictionRequest {
     google.protobuf.Timestamp updated_at = 4;
 }
 
+message GapEvent {
+    uint64 from_block = 1;
+    uint64 to_block = 2;
+    google.protobuf.Timestamp detected_at = 3;
+  
+    enum Reason {
+        UNKNOW = 0;
+        RECONNECT = 1;
+        WS_DISCONECTED = 2;
+    }
+
+    Reason reason = 4;
+}
+
 message GasPredictionResponse {
-    bool Success = 1;
+    bool success = 1;
     string message = 2;
+    uint64 ack_block = 3;
 }

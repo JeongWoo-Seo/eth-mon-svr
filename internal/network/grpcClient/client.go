@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
@@ -22,8 +23,11 @@ const (
 type GasPredictionClient struct {
 	client       pb.GasPredictionServiceClient
 	conn         *grpc.ClientConn
-	GasPredictCh chan *pb.GasPredictionRequest
+	GasPredictCh chan *pb.GasPredictionStream
 	FeeBucketCh  chan *pb.FeeStatisticsRequest
+
+	mu                      sync.Mutex
+	gasPreidctLastSentBlock uint64
 }
 
 func NewGasPredictClient(ctx context.Context, addr string) (*GasPredictionClient, func(), error) {
@@ -33,10 +37,11 @@ func NewGasPredictClient(ctx context.Context, addr string) (*GasPredictionClient
 	}
 
 	c := &GasPredictionClient{
-		client:       pb.NewGasPredictionServiceClient(cc),
-		conn:         cc,
-		GasPredictCh: make(chan *pb.GasPredictionRequest, gasPredictionBufferSize),
-		FeeBucketCh:  make(chan *pb.FeeStatisticsRequest, feeBucketBufferSize),
+		client:                  pb.NewGasPredictionServiceClient(cc),
+		conn:                    cc,
+		GasPredictCh:            make(chan *pb.GasPredictionStream, gasPredictionBufferSize),
+		FeeBucketCh:             make(chan *pb.FeeStatisticsRequest, feeBucketBufferSize),
+		gasPreidctLastSentBlock: 0,
 	}
 
 	grpcCtx, cancel := context.WithCancel(ctx)
@@ -124,14 +129,56 @@ func (c *GasPredictionClient) processStream(ctx context.Context, stream pb.GasPr
 					slog.String("system", "grpc client"))
 				return err
 			}
+
+			res, err := stream.Recv()
+			if err != nil {
+				logger.Error(ctx, "failed to recv gas prediction via stream",
+					err,
+					slog.String("system", "grpc client"))
+				return err
+			}
+
+			if !res.Success {
+				return fmt.Errorf("server rejected: %s", res.Message)
+			}
+
+			if p := req.GetPrediction(); p != nil {
+				c.mu.Lock()
+				c.gasPreidctLastSentBlock = p.NextBlockNumber
+				c.mu.Unlock()
+			}
 		}
 	}
 }
 
-func (c *GasPredictionClient) GasPredictResultSend(req *pb.GasPredictionRequest) {
+func (c *GasPredictionClient) GasPredictResultSend(req *pb.GasPredictionStream) {
+	p := req.GetPrediction()
+	if p == nil {
+		return
+	}
+
+	c.mu.Lock()
+	last := c.gasPreidctLastSentBlock
+	c.mu.Unlock()
+
+	if last != 0 && p.NextBlockNumber > last+1 {
+		gap := &pb.GasPredictionStream{
+			Event: &pb.GasPredictionStream_Gap{
+				Gap: &pb.GapEvent{
+					FromBlock: last + 1,
+					ToBlock:   p.NextBlockNumber - 1,
+					Reason:    pb.GapEvent_RECONNECT,
+				},
+			},
+		}
+		c.enqueue(gap)
+	}
+	c.enqueue(req)
+}
+
+func (c *GasPredictionClient) enqueue(req *pb.GasPredictionStream) {
 	select {
 	case c.GasPredictCh <- req:
-		return
 
 	// 버퍼가 가득찰 경우
 	default:

@@ -274,11 +274,14 @@ func (a *Analyzer) sendResultToGRPC(result *GasPrediction) {
 		}
 	}
 
-	req := &pb.GasPredictionRequest{
-		NextBlockNumber: result.NextBlockNumber,
-		NextBaseFee:     result.NextBaseFee,
-		PredictResult:   pbPredictResult,
-		UpdatedAt:       timestamppb.New(result.UpdatedAt),
+	req := &pb.GasPredictionStream{
+		Event: &pb.GasPredictionStream_Prediction{
+			Prediction: &pb.GasPredictionRequest{
+				NextBlockNumber: result.NextBlockNumber,
+				NextBaseFee:     result.NextBaseFee,
+				PredictResult:   pbPredictResult,
+				UpdatedAt:       timestamppb.New(result.UpdatedAt)},
+		},
 	}
 
 	a.grpcClient.GasPredictResultSend(req)
