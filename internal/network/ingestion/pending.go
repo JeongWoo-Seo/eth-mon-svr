@@ -21,7 +21,7 @@ type pendingSession struct {
 
 func (s *Subscriber) runPendingSub(ctx context.Context) {
 	// 첫번째 provider 적용
-	curProvider := s.providers()[0]
+	curProvider := s.providers[0]
 
 	session, err := s.startPendingSession(ctx, curProvider)
 	if err != nil {
@@ -29,7 +29,7 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 			err,
 			slog.String("system", "ethereum"),
 			slog.String("action", "subscribe"),
-			slog.String("Provider", curProvider.name),
+			slog.String("Provider", curProvider.Name),
 		)
 		return
 	}
@@ -46,7 +46,7 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 
 		// 주지적으로 provider 변경
 		case <-rotation.C:
-			nextProvider, ok := s.alternateProvider(session.provider.name)
+			nextProvider, ok := s.alternateProvider(session.provider.Name)
 			if !ok {
 				continue
 			}
@@ -56,8 +56,8 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 				logger.Info(ctx, "rotation pending provider switch",
 					slog.String("system", "ethereum"),
 					slog.String("action", "handover"),
-					slog.String("from", session.provider.name),
-					slog.String("to", nextSession.provider.name),
+					slog.String("from", session.provider.Name),
+					slog.String("to", nextSession.provider.Name),
 				)
 				session = nextSession
 			}
@@ -74,7 +74,7 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 			}
 
 			//이미 변경할 provider로 동작 중인 경우
-			if forced == session.provider.name {
+			if forced == session.provider.Name {
 				continue
 			}
 
@@ -91,8 +91,8 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 					"forcing pending provider switch",
 					slog.String("system", "ethereum"),
 					slog.String("action", "handover"),
-					slog.String("from", session.provider.name),
-					slog.String("to", nextSession.provider.name),
+					slog.String("from", session.provider.Name),
+					slog.String("to", nextSession.provider.Name),
 				)
 				session = nextSession
 			}
@@ -108,11 +108,11 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 				slog.String("system", "ethereum"),
 				slog.String("action", "unsubscribe"),
 				slog.String("subscription", "PendingTx"),
-				slog.String("provider", session.provider.name),
+				slog.String("provider", session.provider.Name),
 			)
 
 			for {
-				nextProvider, ok := s.alternateProvider(session.provider.name)
+				nextProvider, ok := s.alternateProvider(session.provider.Name)
 				if !ok {
 					return
 				}
@@ -123,7 +123,7 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 					logger.Info(ctx, "ethereum pending subscription reconnect",
 						slog.String("system", "ethereum"),
 						slog.String("action", "subscribe"),
-						slog.String("provider", session.provider.name),
+						slog.String("provider", session.provider.Name),
 					)
 					break
 				}
@@ -141,7 +141,7 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 func (s *Subscriber) handoverPending(ctx context.Context, old *pendingSession, firstProvider Provider) (*pendingSession, bool) {
 	provider := firstProvider
 
-	for i := 0; i < len(s.providers()); i++ {
+	for i := 0; i < len(s.providers); i++ {
 		if ctx.Err() != nil {
 			return old, false
 		}
@@ -164,11 +164,11 @@ func (s *Subscriber) handoverPending(ctx context.Context, old *pendingSession, f
 		logger.Warn(ctx, "failed to subscribe pending",
 			slog.String("system", "ethereum"),
 			slog.String("action", "subscribe"),
-			slog.String("provider", provider.name),
+			slog.String("provider", provider.Name),
 			slog.Any("error", err),
 		)
 
-		nextProvider, ok := s.alternateProvider(provider.name)
+		nextProvider, ok := s.alternateProvider(provider.Name)
 		if !ok {
 			break
 		}
@@ -211,7 +211,7 @@ func (s *Subscriber) startPendingSession(ctx context.Context, provider Provider)
 }
 
 func (s *Subscriber) connectPendingAndStream(ctx context.Context, session *pendingSession) error {
-	client, err := rpc.DialContext(ctx, session.provider.url)
+	client, err := rpc.DialContext(ctx, session.provider.Url)
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func (s *Subscriber) connectPendingAndStream(ctx context.Context, session *pendi
 		slog.String("system", "ethereum"),
 		slog.String("action", "subscribe"),
 		slog.String("subscription", "PendingTx"),
-		slog.String("provider", session.provider.name),
+		slog.String("provider", session.provider.Name),
 	)
 
 	//연결 완료 ch

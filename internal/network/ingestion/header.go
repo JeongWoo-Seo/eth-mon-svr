@@ -30,7 +30,7 @@ func (s *Subscriber) runHeaderSub(ctx context.Context) {
 			slog.String("system", "ethereum"),
 			slog.String("action", "subscribe"),
 			slog.String("subscription", "Header"),
-			slog.String("provider", provider.name),
+			slog.String("provider", provider.Name),
 		)
 
 		err := s.connectHeadAndStream(ctx, provider)
@@ -43,24 +43,24 @@ func (s *Subscriber) runHeaderSub(ctx context.Context) {
 			slog.String("system", "ethereum"),
 			slog.String("action", "disconnect"),
 			slog.String("subscription", "Header"),
-			slog.String("provider", provider.name),
+			slog.String("provider", provider.Name),
 		)
 
 		//block ws 오류 시 provider 변경
-		nextProvider, ok := s.alternateProvider(provider.name)
+		nextProvider, ok := s.alternateProvider(provider.Name)
 		if ok {
-			currentProvider = nextProvider.name
+			currentProvider = nextProvider.Name
 
 			// block 변경을 pending 관리에 알림
-			s.notifyPendingSwitch(nextProvider.name)
+			s.notifyPendingSwitch(nextProvider.Name)
 
 			logger.Info(
 				ctx,
 				"change ethereum provider",
 				slog.String("system", "ethereum"),
 				slog.String("action", "change network"),
-				slog.String("from", provider.name),
-				slog.String("to", nextProvider.name),
+				slog.String("from", provider.Name),
+				slog.String("to", nextProvider.Name),
 			)
 		}
 
@@ -78,9 +78,9 @@ func (s *Subscriber) runHeaderSub(ctx context.Context) {
 }
 
 func (s *Subscriber) connectHeadAndStream(ctx context.Context, provider Provider) error {
-	client, err := rpc.DialContext(ctx, provider.url)
+	client, err := rpc.DialContext(ctx, provider.Url)
 	if err != nil {
-		return fmt.Errorf("failed to dial %s: %w", provider.name, err)
+		return fmt.Errorf("failed to dial %s: %w", provider.Name, err)
 	}
 	defer client.Close()
 
@@ -88,7 +88,7 @@ func (s *Subscriber) connectHeadAndStream(ctx context.Context, provider Provider
 
 	sub, err := client.EthSubscribe(ctx, ch, "newHeads")
 	if err != nil {
-		return fmt.Errorf("failed to subscribe %s: %w", provider.name, err)
+		return fmt.Errorf("failed to subscribe %s: %w", provider.Name, err)
 	}
 	defer sub.Unsubscribe()
 
@@ -104,7 +104,7 @@ func (s *Subscriber) connectHeadAndStream(ctx context.Context, provider Provider
 		slog.String("system", "ethereum"),
 		slog.String("action", "subscribe"),
 		slog.String("subscription", "Header"),
-		slog.String("provider", provider.name),
+		slog.String("provider", provider.Name),
 	)
 
 	for {
@@ -128,7 +128,7 @@ func (s *Subscriber) connectHeadAndStream(ctx context.Context, provider Provider
 
 		case <-watchdog.C:
 			if time.Since(lastHeaderAt) >= headerTimeout {
-				return fmt.Errorf("%w: provider=%s last_header=%s", errHeaderTimeout, provider.name, lastHeaderAt.Format(time.RFC3339))
+				return fmt.Errorf("%w: provider=%s last_header=%s", errHeaderTimeout, provider.Name, lastHeaderAt.Format(time.RFC3339))
 			}
 		}
 	}

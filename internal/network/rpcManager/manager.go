@@ -12,109 +12,100 @@ import (
 const (
 	ProviderAlchemy    string = "alchemy"
 	ProviderChainstack string = "chainstack"
+
+	RotateInterval = 30 * time.Second
 )
 
 type RPCManager struct {
-	mu          sync.RWMutex
-	primary     *Client
-	backup      *Client
-	active      *Client
-	backupUntil time.Time
+	mu      sync.RWMutex
+	clients []*Client
+	active  int
+
+	rotateInterval time.Duration
+	lastRotateAt   time.Time
 }
 
-func NewRpcManager(alcUrl, chaUrl string) (*RPCManager, error) {
-	alcClient, err := NewEthClient(ProviderAlchemy, alcUrl)
-	if err != nil {
-		return nil, err
+func NewRpcManager(rpcs map[string]string) (*RPCManager, error) {
+	clients := make([]*Client, 0, len(rpcs))
+
+	for provider, url := range rpcs {
+		client, err := NewEthClient(provider, url)
+		if err != nil {
+			client.Close()
+			continue
+		}
+		clients = append(clients, client)
 	}
 
-	chaClinent, err := NewEthClient(ProviderChainstack, chaUrl)
-	if err != nil {
-		alcClient.Close()
-		return nil, err
+	if len(clients) == 0 {
+		return nil, fmt.Errorf("no rpc clients")
 	}
 
 	return &RPCManager{
-		primary: alcClient,
-		backup:  chaClinent,
-		active:  alcClient,
+		clients:        clients,
+		active:         0,
+		rotateInterval: RotateInterval,
+		lastRotateAt:   time.Now(),
 	}, nil
-}
-
-func (r *RPCManager) GetClient() *Client {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return r.active
 }
 
 func (r *RPCManager) GetProvider() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if r.active == nil {
+	if len(r.clients) == 0 {
 		return ""
 	}
 
-	return r.active.provider
+	return r.clients[r.active].provider
 }
 
 func (r *RPCManager) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.primary != nil {
-		r.primary.Close()
+	for _, client := range r.clients {
+		client.Close()
 	}
-
-	if r.backup != nil {
-		r.backup.Close()
-	}
-
-	r.primary = nil
-	r.backup = nil
-	r.active = nil
 }
 
 func (r *RPCManager) EthClientFunc(ctx context.Context, fn func(client *ethclient.Client) error) error {
 	now := time.Now()
 
 	r.mu.Lock()
-	if r.active == r.backup && !r.backupUntil.IsZero() && now.After(r.backupUntil) {
-		r.active = r.primary
-		r.backupUntil = time.Time{}
-	}
-
-	client := r.active
-	r.mu.Unlock()
-
-	if client == nil || client.EthClient == nil {
+	if len(r.clients) == 0 {
+		r.mu.Unlock()
 		return fmt.Errorf("no ethereum rpc client available")
 	}
+
+	//rotate check
+	if now.Sub(r.lastRotateAt) >= r.rotateInterval {
+		r.active = (r.active + 1) % len(r.clients)
+		r.lastRotateAt = now
+	}
+
+	idx := r.active
+	client := r.clients[idx]
+	r.mu.Unlock()
 
 	// 현재 active client 실행
 	if err := fn(client.EthClient); err == nil {
 		return nil
-	} else if client == r.backup {
-		return err
 	}
 
-	// Primary → Backup
-	r.mu.Lock()
+	// 실패한 경우 다른 provider 순회
+	for i := 1; i < len(r.clients); i++ {
+		next := (idx + i) % len(r.clients)
+		nextClient := r.clients[next]
 
-	if r.active == r.primary && r.backup != nil {
-		r.active = r.backup
-		r.backupUntil = time.Now().Add(1 * time.Minute)
+		if err := fn(nextClient.EthClient); err == nil {
+			r.mu.Lock()
+			r.active = next
+			r.lastRotateAt = time.Now()
+			r.mu.Unlock()
+			return nil
+		}
 	}
 
-	backup := r.active
-
-	r.mu.Unlock()
-
-	if backup == nil || backup.EthClient == nil {
-		return fmt.Errorf("no ethereum rpc client available")
-	}
-
-	// Backup 재실행
-	return fn(backup.EthClient)
+	return fmt.Errorf("all rpc providers failed")
 }

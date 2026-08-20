@@ -41,7 +41,7 @@ func main() {
 	//////////////////////////
 	// connect eth
 	//////////////////////////
-	rpcManager, err := rpcmanager.NewRpcManager(cfg.EthAlcRpcHttpUrl, cfg.EthChaRpcHttpUrl)
+	rpcManager, err := rpcmanager.NewRpcManager(cfg.RPCs)
 	if err != nil {
 		logger.Error(ctx, "failed to connect ethereum rpc",
 			err,
@@ -102,7 +102,7 @@ func main() {
 	//////////////////////////
 	// subscribe eth
 	//////////////////////////
-	sub := ingestion.NewSubscriber(cfg.EthAlcRpcWsUrl, cfg.EthChaRpcWsUrl, coor, dedup)
+	sub := ingestion.NewSubscriber(cfg.WSs, coor, dedup)
 	sub.SubscriberStart(ctx)
 
 	//////////////////////////

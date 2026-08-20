@@ -14,24 +14,21 @@ import (
 )
 
 type Subscriber struct {
-	AlcWsUrl      string
-	chaWsUrl      string
-	coor          *coordinator.Coordinator
-	dedup         *mempool.Cache
-	wg            sync.WaitGroup
+	coor  *coordinator.Coordinator
+	dedup *mempool.Cache
+	wg    sync.WaitGroup
+
+	providers     []Provider
 	pendingSwitch chan string
 }
 
-func NewSubscriber(alcUrl, chaUrl string, coor *coordinator.Coordinator, dedup *mempool.Cache) *Subscriber {
-	s := &Subscriber{
-		AlcWsUrl:      alcUrl,
-		chaWsUrl:      chaUrl,
+func NewSubscriber(providers []Provider, coor *coordinator.Coordinator, dedup *mempool.Cache) *Subscriber {
+	return &Subscriber{
 		coor:          coor,
 		dedup:         dedup,
+		providers:     providers,
 		pendingSwitch: make(chan string, 4),
 	}
-
-	return s
 }
 
 func (s *Subscriber) SubscriberStart(ctx context.Context) {
@@ -52,24 +49,6 @@ func (s *Subscriber) Wait() {
 	s.wg.Wait()
 }
 
-type Provider struct {
-	name string
-	url  string
-}
-
-func (s *Subscriber) providers() []Provider {
-	return []Provider{
-		{
-			name: ProviderChainstack,
-			url:  s.chaWsUrl,
-		},
-		{
-			name: ProviderAlchemy,
-			url:  s.AlcWsUrl,
-		},
-	}
-}
-
 func (s *Subscriber) notifyPendingSwitch(provider string) {
 	select {
 	case s.pendingSwitch <- provider:
@@ -78,9 +57,9 @@ func (s *Subscriber) notifyPendingSwitch(provider string) {
 }
 
 func (s *Subscriber) provider(name string) (Provider, bool) {
-	for _, p := range s.providers() {
-		if p.name == name {
-			if p.url == "" {
+	for _, p := range s.providers {
+		if p.Name == name {
+			if p.Url == "" {
 				return Provider{}, false
 			}
 			return p, true
@@ -90,7 +69,7 @@ func (s *Subscriber) provider(name string) (Provider, bool) {
 }
 
 func (s *Subscriber) alternateProvider(name string) (Provider, bool) {
-	providers := s.providers()
+	providers := s.providers
 	n := len(providers)
 	if n == 0 {
 		return Provider{}, false
@@ -98,8 +77,8 @@ func (s *Subscriber) alternateProvider(name string) (Provider, bool) {
 
 	//시작 idx 찾기
 	curIdx := -1
-	for i, p := range s.providers() {
-		if p.name == name {
+	for i, p := range s.providers {
+		if p.Name == name {
 			curIdx = i
 			break
 		}
@@ -114,7 +93,7 @@ func (s *Subscriber) alternateProvider(name string) (Provider, bool) {
 		nextIdx := (curIdx + i) % n
 		p := providers[nextIdx]
 
-		if p.name == name || p.url == "" {
+		if p.Name == name || p.Url == "" {
 			continue
 		}
 		return p, true

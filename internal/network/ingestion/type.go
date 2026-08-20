@@ -18,3 +18,8 @@ const (
 	ProviderAlchemy    string = "alchemy"
 	ProviderChainstack string = "chainstack"
 )
+
+type Provider struct {
+	Name string
+	Url  string
+}
