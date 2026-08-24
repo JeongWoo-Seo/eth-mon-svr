@@ -10,6 +10,7 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
+	rpcmanager "github.com/JeongWoo-Seo/eth-mon-svr/internal/network/rpcManager"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -50,12 +51,11 @@ func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions
 			}
 		}
 
-		totalCu := chunkSize * receiptCuPerTx
-		if err := p.limiter.WaitN(ctx, totalCu); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrRateLimiterWait, err)
+		cost := rpcmanager.RPCCost{
+			CU:  chunkSize * receiptCuPerTx,
+			RPC: chunkSize,
 		}
-
-		err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+		err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 			return client.Client().BatchCallContext(ctx, chunkElems)
 		})
 		if err != nil {
@@ -86,11 +86,11 @@ func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions
 func (p *Process) fetchBlockReceipts(ctx context.Context, blockHashHex string) ([]*types.Receipt, error) {
 	var receipts []*types.Receipt
 
-	if err := p.limiter.WaitN(ctx, getBlockReceiptCu); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRateLimiterWait, err)
+	cost := rpcmanager.RPCCost{
+		CU:  getBlockReceiptCu,
+		RPC: 1,
 	}
-
-	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+	err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 		return client.Client().CallContext(ctx, &receipts, "eth_getBlockReceipts", blockHashHex)
 	})
 	if err != nil {
@@ -101,12 +101,12 @@ func (p *Process) fetchBlockReceipts(ctx context.Context, blockHashHex string) (
 		return receipts, nil
 	}
 
-	var txCountHex string
-	if err := p.limiter.WaitN(ctx, getBlockTxCountCu); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRateLimiterWait, err)
+	cost = rpcmanager.RPCCost{
+		CU:  getBlockTxCountCu,
+		RPC: 1,
 	}
-
-	err = p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+	var txCountHex string
+	err = p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 		return client.Client().CallContext(ctx, &txCountHex, "eth_getBlockTransactionCountByHash", blockHashHex)
 	})
 	if err != nil {

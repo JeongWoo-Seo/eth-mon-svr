@@ -20,7 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
-	"golang.org/x/time/rate"
 )
 
 const (
@@ -39,8 +38,6 @@ type Process struct {
 	gasanalyzer *gasanalyzer.Analyzer
 	grpcClient  *grpcClient.GasPredictionClient
 
-	limiter *rate.Limiter
-
 	mu sync.RWMutex
 }
 
@@ -52,8 +49,6 @@ func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Stor
 		rpcManager:  rpcManager,
 		gasanalyzer: gasanalyzer,
 		grpcClient:  grpcClinet,
-
-		limiter: rate.NewLimiter(rate.Limit(400), 500),
 	}
 }
 
@@ -81,17 +76,12 @@ func (p *Process) GetTxInfo(ctx context.Context, hashes []common.Hash) {
 			}
 		}
 
-		totalCu := chunkSize * getTxCuPerTx
-		if err := p.limiter.WaitN(ctx, totalCu); err != nil {
-			logger.Error(ctx, "Rate limiter error in GetTxInfo",
-				err,
-				slog.String("system", "limiter"),
-				slog.Int("requested_cu", totalCu))
-			break
+		cost := rpcmanager.RPCCost{
+			CU:  chunkSize * getTxCuPerTx,
+			RPC: chunkSize,
 		}
-
 		// tx 정보 요청
-		err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+		err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 			return client.Client().BatchCallContext(ctx, chunkElems)
 		})
 		if err != nil {
@@ -203,14 +193,14 @@ func (p *Process) Initialize(ctx context.Context) (*types.Header, error) {
 }
 
 func (p *Process) HeaderByNumber(ctx context.Context, number uint64) (*types.Header, error) {
-	if err := p.limiter.WaitN(ctx, getBlockByNumberCu); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRateLimiterWait, err)
-	}
-
 	var header *types.Header
 
+	cost := rpcmanager.RPCCost{
+		CU:  getBlockByNumberCu,
+		RPC: 1,
+	}
 	// tx 정보 요청
-	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+	err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 		var err error
 		header, err = client.HeaderByNumber(ctx, new(big.Int).SetUint64(number))
 		return err
@@ -312,16 +302,12 @@ func (p *Process) CompareFeeHistory(ctx context.Context) {
 		per = append(per, t.Percentile*100)
 	}
 
-	if err := p.limiter.WaitN(ctx, feeHistoryCu); err != nil {
-		logger.Error(ctx, "Rate limiter error in CompareFeeHistory",
-			err,
-			"system", "analysis",
-			"requested_cu", feeHistoryCu)
-		return
+	cost := rpcmanager.RPCCost{
+		CU:  feeHistoryCu,
+		RPC: 1,
 	}
-
 	var history *ethereum.FeeHistory
-	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+	err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 		var err error
 		history, err = client.FeeHistory(ctx, 1, big.NewInt(int64(preResult.NextBlockNumber)), per)
 		return err

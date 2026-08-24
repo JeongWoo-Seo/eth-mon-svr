@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 
+	rpcmanager "github.com/JeongWoo-Seo/eth-mon-svr/internal/network/rpcManager"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 func (p *Process) getLastestBlockHeader(ctx context.Context) (*types.Header, error) {
-	if err := p.limiter.WaitN(ctx, getBlockReceiptCu); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRateLimiterWait, err)
-	}
-
 	var header *types.Header
-	err := p.rpcManager.EthClientFunc(ctx, func(client *ethclient.Client) error {
+	cost := rpcmanager.RPCCost{
+		CU:  getBlockReceiptCu,
+		RPC: 1,
+	}
+	err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 		var err error
 		header, err = client.HeaderByNumber(ctx, nil)
 		return err

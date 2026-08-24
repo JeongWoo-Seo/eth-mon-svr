@@ -9,13 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-const (
-	ProviderAlchemy    string = "alchemy"
-	ProviderChainstack string = "chainstack"
-
-	RotateInterval = 30 * time.Second
-)
-
 type RPCManager struct {
 	mu      sync.RWMutex
 	clients []*Client
@@ -29,7 +22,12 @@ func NewRpcManager(rpcs map[string]string) (*RPCManager, error) {
 	clients := make([]*Client, 0, len(rpcs))
 
 	for provider, url := range rpcs {
-		client, err := NewEthClient(provider, url)
+		policy, ok := rpcPolicies[provider]
+		if !ok {
+			return nil, fmt.Errorf("unsupported rpc provider: %s", provider)
+		}
+
+		client, err := NewEthClient(provider, url, policy)
 		if err != nil {
 			client.Close()
 			continue
@@ -69,7 +67,7 @@ func (r *RPCManager) Close() {
 	}
 }
 
-func (r *RPCManager) EthClientFunc(ctx context.Context, fn func(client *ethclient.Client) error) error {
+func (r *RPCManager) EthClientFunc(ctx context.Context, cost RPCCost, fn func(client *ethclient.Client) error) error {
 	now := time.Now()
 
 	r.mu.Lock()
@@ -88,6 +86,11 @@ func (r *RPCManager) EthClientFunc(ctx context.Context, fn func(client *ethclien
 	client := r.clients[idx]
 	r.mu.Unlock()
 
+	// rpc  통신 limit
+	if err := client.Wait(ctx, cost); err != nil {
+		return fmt.Errorf("rpc rate limit exceeded: provider=%s: %w", client.provider, err)
+	}
+
 	// 현재 active client 실행
 	if err := fn(client.EthClient); err == nil {
 		return nil
@@ -97,6 +100,10 @@ func (r *RPCManager) EthClientFunc(ctx context.Context, fn func(client *ethclien
 	for i := 1; i < len(r.clients); i++ {
 		next := (idx + i) % len(r.clients)
 		nextClient := r.clients[next]
+
+		if err := client.Wait(ctx, cost); err != nil {
+			continue
+		}
 
 		if err := fn(nextClient.EthClient); err == nil {
 			r.mu.Lock()

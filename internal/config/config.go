@@ -73,11 +73,11 @@ func LoadConfig() *Config {
 
 	wss := []ingestion.Provider{
 		{
-			Name: ingestion.ProviderAlchemy,
+			Name: rpcmanager.ProviderAlchemy,
 			Url:  raw.AlcWS,
 		},
 		{
-			Name: ingestion.ProviderChainstack,
+			Name: rpcmanager.ProviderChainstack,
 			Url:  raw.ChaWS,
 		},
 	}
