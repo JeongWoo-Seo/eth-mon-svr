@@ -6,6 +6,7 @@ const (
 	pendingRotationInterval = 30 * time.Second
 	pendingReadyTimeout     = 5 * time.Second
 	txBufferSize            = 50000
+	txDedupCasheSize        = 10000
 
 	headerTimeout    = 30 * time.Second
 	watchdogInterval = 10 * time.Second

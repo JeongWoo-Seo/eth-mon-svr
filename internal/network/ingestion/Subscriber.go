@@ -2,33 +2,38 @@ package ingestion
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/coordinator"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/mempool"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/report"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type Subscriber struct {
 	coor  *coordinator.Coordinator
-	dedup *mempool.Cache
+	dedup *Cache
 	wg    sync.WaitGroup
 
 	providers     []Provider
 	pendingSwitch chan string
 }
 
-func NewSubscriber(providers []Provider, coor *coordinator.Coordinator, dedup *mempool.Cache) *Subscriber {
+func NewSubscriber(providers []Provider, coor *coordinator.Coordinator) (*Subscriber, error) {
+	dedup, err := NewCache(txDedupCasheSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dedup cashe: %w", err)
+	}
+
 	return &Subscriber{
 		coor:          coor,
 		dedup:         dedup,
 		providers:     providers,
 		pendingSwitch: make(chan string, 4),
-	}
+	}, nil
 }
 
 func (s *Subscriber) SubscriberStart(ctx context.Context) {
@@ -108,7 +113,7 @@ func subscription[T any](
 	method string,
 	buff int,
 	outCh chan<- T,
-	dedup *mempool.Cache,
+	dedup *Cache,
 ) {
 	for {
 		err := connectAndStream(ctx, url, label, method, buff, outCh, dedup)
@@ -147,7 +152,7 @@ func connectAndStream[T any](
 	method string,
 	buff int,
 	outCh chan<- T,
-	dedup *mempool.Cache,
+	dedup *Cache,
 ) error {
 	client, err := rpc.DialContext(ctx, url)
 	if err != nil {

@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
@@ -95,14 +94,6 @@ func main() {
 		panic(err)
 	}
 
-	dedup, err := mempool.NewCache(10000, 4*time.Minute)
-	if err != nil {
-		logger.Error(ctx, "failed to initialize mempool cache",
-			err,
-			slog.String("system", "mempool"))
-		panic(err)
-	}
-
 	blockPool := blockstore.NewBlockStore(cfg.MaxBlockCount)
 
 	//////////////////////////
@@ -118,7 +109,13 @@ func main() {
 	//////////////////////////
 	// subscribe eth
 	//////////////////////////
-	sub := ingestion.NewSubscriber(cfg.WSs, coor, dedup)
+	sub, err := ingestion.NewSubscriber(cfg.WSs, coor)
+	if err != nil {
+		logger.Error(ctx, "failed to initialize pending tx cache",
+			err,
+			slog.String("system", "Subscribe"))
+		panic(err)
+	}
 	sub.SubscriberStart(ctx)
 
 	//////////////////////////
