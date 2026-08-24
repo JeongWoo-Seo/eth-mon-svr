@@ -11,9 +11,11 @@ import (
 )
 
 type Config struct {
-	Service           string
-	Env               string
-	ServerPort        string
+	Service          string
+	Env              string
+	ServerPort       string
+	AuthClientSecret string
+
 	GrpcServerAddr    string
 	EthSepoliaChainId string
 
@@ -25,10 +27,12 @@ type Config struct {
 }
 
 type rawConfig struct {
-	Service           string `mapstructure:"SERVICE"`
-	Env               string `mapstructure:"ENV"`
-	ServerPort        string `mapstructure:"SERVER_PORT"`
-	GrpcServerAddr    string `mapstructure:"GRPC_SERVER_ADDR"`
+	Service          string `mapstructure:"SERVICE"`
+	Env              string `mapstructure:"ENV"`
+	ServerPort       string `mapstructure:"SERVER_PORT"`
+	AuthClientSecret string `mapstructure:"AUTH_CLIENT_SECRET"`
+	GrpcServerAddr   string `mapstructure:"GRPC_SERVER_ADDR"`
+
 	EthSepoliaChainId string `mapstructure:"ETH_SEPOLIA_CHAIN_ID"`
 
 	AlcHTTP string `mapstructure:"ETH_ALC_RPC_HTTP_URL"`
@@ -82,6 +86,7 @@ func LoadConfig() *Config {
 		Service:           raw.Service,
 		Env:               raw.Env,
 		ServerPort:        raw.ServerPort,
+		AuthClientSecret:  raw.AuthClientSecret,
 		GrpcServerAddr:    raw.GrpcServerAddr,
 		EthSepoliaChainId: raw.EthSepoliaChainId,
 		TxStoreBlockTTL:   raw.TxStoreBlockTTL,

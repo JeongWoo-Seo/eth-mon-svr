@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "github.com/JeongWoo-Seo/eth-mon-svr/internal/pb";
+
+message AuthenticateRequest {
+    string client_id = 1;
+    string client_secret = 2;
+}
+
+message AuthenticateResponse {
+    string access_token = 1;
+}
+
+service AuthService {
+    rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+  
+}
+

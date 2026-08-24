@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/auth"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -30,8 +31,11 @@ type GasPredictionClient struct {
 	gasPreidctLastSentBlock uint64
 }
 
-func NewGasPredictClient(ctx context.Context, addr string) (*GasPredictionClient, func(), error) {
-	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func NewGasPredictClient(ctx context.Context, addr string, tokenManager *auth.TokenManager) (*GasPredictionClient, func(), error) {
+	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(auth.UnaryClientInterceptor(tokenManager)),
+		grpc.WithStreamInterceptor(auth.StreamClientInterceptor(tokenManager)),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/config"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/coordinator"
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/auth"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/grpcClient"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/ingestion"
 	rpcmanager "github.com/JeongWoo-Seo/eth-mon-svr/internal/network/rpcManager"
@@ -60,7 +61,22 @@ func main() {
 	//////////////////////////
 	// connect grpc
 	//////////////////////////
-	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(ctx, cfg.GrpcServerAddr)
+	authGrpcClient, err := auth.NewAuthGrpcClient(cfg.GrpcServerAddr)
+	if err != nil {
+		logger.Error(ctx, "fail to connet auth gRPC ",
+			err,
+			slog.String("system", "grpc client"))
+	}
+	defer authGrpcClient.Close()
+
+	tokenManager, err := auth.NewTokenManager(authGrpcClient, cfg.Service, cfg.AuthClientSecret)
+	if err != nil {
+		logger.Error(ctx, "fail to generate token manager",
+			err,
+			slog.String("system", "grpc client"))
+	}
+
+	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(ctx, cfg.GrpcServerAddr, tokenManager)
 	if err != nil {
 		logger.Error(ctx, "fail to connet gRPC ",
 			err,
