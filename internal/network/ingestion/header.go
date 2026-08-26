@@ -92,12 +92,6 @@ func (s *Subscriber) connectHeadAndStream(ctx context.Context, provider Provider
 	}
 	defer sub.Unsubscribe()
 
-	lastHeaderAt := time.Now()
-
-	//headerTimeout = 30 , 10 초단위로
-	watchdog := time.NewTimer(watchdogInterval)
-	defer watchdog.Stop()
-
 	logger.Info(
 		ctx,
 		"ethereum header subscribed",
@@ -107,24 +101,42 @@ func (s *Subscriber) connectHeadAndStream(ctx context.Context, provider Provider
 		slog.String("provider", provider.Name),
 	)
 
+	return consumeHeaderStream(ctx, provider, ch, sub.Err(), watchdogInterval, headerTimeout, s.coor.PushHeader)
+}
+
+func consumeHeaderStream(
+	ctx context.Context,
+	provider Provider,
+	headers <-chan *types.Header,
+	errs <-chan error,
+	watchdogInterval time.Duration,
+	headerTimeout time.Duration,
+	push func(*types.Header),
+) error {
+	lastHeaderAt := time.Now()
+
+	//headerTimeout = 30 , 10 초단위로 확인
+	watchdog := time.NewTimer(watchdogInterval)
+	defer watchdog.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case err, ok := <-sub.Err():
+		case err, ok := <-errs:
 			if !ok || err == nil {
 				return errSubscriptionClosed
 			}
 			return err
 
-		case header := <-ch:
+		case header := <-headers:
 			if header == nil {
 				continue
 			}
 
 			lastHeaderAt = time.Now()
-			s.coor.PushHeader(header)
+			push(header)
 
 		case <-watchdog.C:
 			if time.Since(lastHeaderAt) >= headerTimeout {

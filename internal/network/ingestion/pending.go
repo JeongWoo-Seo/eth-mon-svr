@@ -189,7 +189,7 @@ func (s *Subscriber) startPendingSession(ctx context.Context, provider Provider)
 	}
 
 	go func() {
-		session.done <- s.connectPendingAndStream(streamCtx, session)
+		session.done <- s.connectPendingStream(streamCtx, session)
 	}()
 
 	select {

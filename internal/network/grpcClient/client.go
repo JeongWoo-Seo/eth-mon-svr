@@ -2,6 +2,7 @@ package grpcClient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -19,6 +20,10 @@ const (
 	feeBucketBufferSize     = 1
 	streamReconnectDelay    = 2 * time.Second
 	unaryRetryDelay         = 2 * time.Second
+	streamFastRetryCount    = 3
+	streamFastRetryDelay    = 2 * time.Second
+	streamMaxRetryDelay     = 30 * time.Second
+	maxFeeBucketAttempts    = 3
 )
 
 type GasPredictionClient struct {
@@ -29,6 +34,8 @@ type GasPredictionClient struct {
 
 	mu                      sync.Mutex
 	gasPreidctLastSentBlock uint64
+
+	unaryRetryDelay time.Duration
 }
 
 func NewGasPredictClient(ctx context.Context, addr string, tokenManager *auth.TokenManager) (*GasPredictionClient, func(), error) {
@@ -46,6 +53,7 @@ func NewGasPredictClient(ctx context.Context, addr string, tokenManager *auth.To
 		GasPredictCh:            make(chan *pb.GasPredictionStream, gasPredictionBufferSize),
 		FeeBucketCh:             make(chan *pb.FeeStatisticsRequest, feeBucketBufferSize),
 		gasPreidctLastSentBlock: 0,
+		unaryRetryDelay:         unaryRetryDelay,
 	}
 
 	grpcCtx, cancel := context.WithCancel(ctx)
@@ -73,6 +81,9 @@ func NewGasPredictClient(ctx context.Context, addr string, tokenManager *auth.To
 //stream
 
 func (c *GasPredictionClient) startStreamWorker(ctx context.Context) {
+	retryCount := 0
+	retryDelay := streamFastRetryDelay
+
 	for {
 		// ctx 종료 신호
 		if ctx.Err() != nil {
@@ -83,7 +94,23 @@ func (c *GasPredictionClient) startStreamWorker(ctx context.Context) {
 		}
 
 		stream, err := c.client.UploadGasPredictions(ctx)
-		if err != nil {
+		if err == nil {
+			logger.Info(ctx, "stream connected successfully",
+				slog.String("system", "grpc client"))
+
+			retryCount = 0
+			retryDelay = streamFastRetryDelay
+
+			streamErr := c.processStream(ctx, stream)
+			//ctx 종료 시
+			if ctx.Err() != nil {
+				return
+			}
+
+			logger.Warn(ctx, "stream disconnected, reconnecting",
+				slog.String("system", "grpc client"),
+				slog.Any("err", streamErr))
+		} else {
 			if ctx.Err() != nil {
 				return
 			}
@@ -91,30 +118,26 @@ func (c *GasPredictionClient) startStreamWorker(ctx context.Context) {
 			logger.Error(ctx, "failed to connect stream",
 				err,
 				slog.String("system", "grpc client"))
+		}
 
-			//reconnect and retry delay
-			if !WaitForRetry(ctx, streamReconnectDelay) {
+		//reconnect and retry delay
+		if retryCount < streamFastRetryCount {
+			retryCount++
+
+			if !WaitForRetry(ctx, streamFastRetryDelay) {
 				return
 			}
 
 			continue
 		}
 
-		logger.Info(ctx, "stream connected successfully",
-			slog.String("system", "grpc client"))
-
-		streamErr := c.processStream(ctx, stream)
-		//ctx 종료 시
-		if ctx.Err() != nil {
+		if !WaitForRetry(ctx, retryDelay) {
 			return
 		}
 
-		logger.Warn(ctx, "stream disconnected, reconnecting",
-			slog.String("system", "grpc client"),
-			slog.Any("err", streamErr))
-
-		if !WaitForRetry(ctx, streamReconnectDelay) {
-			return
+		retryDelay *= 2
+		if retryDelay > streamMaxRetryDelay {
+			retryDelay = streamMaxRetryDelay
 		}
 	}
 }
@@ -125,7 +148,15 @@ func (c *GasPredictionClient) processStream(ctx context.Context, stream pb.GasPr
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case req := <-c.GasPredictCh:
+		case req, ok := <-c.GasPredictCh:
+			if !ok {
+				return nil
+			}
+
+			if req == nil {
+				continue
+			}
+
 			//스트림 메시지 전송
 			if err := stream.Send(req); err != nil {
 				logger.Error(ctx, "failed to send gas prediction via stream",
@@ -208,34 +239,60 @@ func (c *GasPredictionClient) startUnaryWoker(ctx context.Context) {
 				return
 			}
 
-			c.sendFeeBucket(ctx, req)
+			if err := c.sendFeeBucket(ctx, req); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return
+				}
+
+				logger.Error(ctx, "failed to send fee statistics after max attempts",
+					err,
+					slog.String("system", "grpc client"),
+					slog.Int("max_attempts", maxFeeBucketAttempts),
+				)
+			}
 		}
 	}
 }
 
-func (c *GasPredictionClient) sendFeeBucket(ctx context.Context, req *pb.FeeStatisticsRequest) {
-	for {
+func (c *GasPredictionClient) sendFeeBucket(ctx context.Context, req *pb.FeeStatisticsRequest) error {
+	var lastErr error
+
+	delay := c.unaryRetryDelay
+	if delay <= 0 {
+		delay = unaryRetryDelay
+	}
+
+	for attempt := 1; attempt <= maxFeeBucketAttempts; attempt++ {
 		//종류 ctx가 발생 시
 		if ctx.Err() != nil {
-			return
+			return ctx.Err()
 		}
 
 		_, err := c.client.UploadFeeBuckets(ctx, req)
 		if err == nil {
 			logger.Info(ctx, "fee statistics sent successfully",
 				slog.String("system", "grpc client"))
-			return
+
+			return nil
 		}
 
+		lastErr = err
 		// 전송 실패 시 retry
 		logger.Error(ctx, "failed to send fee statistics and retry",
 			err,
-			slog.String("system", "grpc client"))
+			slog.String("system", "grpc client"),
+			slog.Int("attempt", attempt))
 
-		if !WaitForRetry(ctx, unaryRetryDelay) {
-			return
+		if attempt == maxFeeBucketAttempts {
+			break
+		}
+
+		if !WaitForRetry(ctx, delay) {
+			return ctx.Err()
 		}
 	}
+
+	return lastErr
 }
 
 func (c *GasPredictionClient) FeeBucketSend(req *pb.FeeStatisticsRequest) {

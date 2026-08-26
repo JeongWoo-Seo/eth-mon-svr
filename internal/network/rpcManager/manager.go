@@ -86,14 +86,14 @@ func (r *RPCManager) EthClientFunc(ctx context.Context, cost RPCCost, fn func(cl
 	client := r.clients[idx]
 	r.mu.Unlock()
 
-	// rpc  통신 limit
-	if err := client.Wait(ctx, cost); err != nil {
-		return fmt.Errorf("rpc rate limit exceeded: provider=%s: %w", client.provider, err)
-	}
-
-	// 현재 active client 실행
-	if err := fn(client.EthClient); err == nil {
-		return nil
+	// active client가 사용 가능하면 실행, nil·rate limit·실패 시 아래 failover로 넘어감
+	if client.EthClient != nil {
+		// rpc 통신 limit (초과 시 failover)
+		if err := client.Wait(ctx, cost); err == nil {
+			if err := fn(client.EthClient); err == nil {
+				return nil
+			}
+		}
 	}
 
 	// 실패한 경우 다른 provider 순회
@@ -101,7 +101,11 @@ func (r *RPCManager) EthClientFunc(ctx context.Context, cost RPCCost, fn func(cl
 		next := (idx + i) % len(r.clients)
 		nextClient := r.clients[next]
 
-		if err := client.Wait(ctx, cost); err != nil {
+		if nextClient.EthClient == nil {
+			continue
+		}
+
+		if err := nextClient.Wait(ctx, cost); err != nil {
 			continue
 		}
 

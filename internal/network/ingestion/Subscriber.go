@@ -20,6 +20,9 @@ type Subscriber struct {
 
 	providers     []Provider
 	pendingSwitch chan string
+
+	//Subscriber test를 위해 외부 네트워크 연결 func을 struct에 포함함
+	connectPendingStream func(ctx context.Context, session *pendingSession) error
 }
 
 func NewSubscriber(providers []Provider, coor *coordinator.Coordinator) (*Subscriber, error) {
@@ -28,12 +31,15 @@ func NewSubscriber(providers []Provider, coor *coordinator.Coordinator) (*Subscr
 		return nil, fmt.Errorf("failed to create dedup cashe: %w", err)
 	}
 
-	return &Subscriber{
+	s := &Subscriber{
 		coor:          coor,
 		dedup:         dedup,
 		providers:     providers,
 		pendingSwitch: make(chan string, 4),
-	}, nil
+	}
+	s.connectPendingStream = s.connectPendingAndStream
+
+	return s, nil
 }
 
 func (s *Subscriber) SubscriberStart(ctx context.Context) {

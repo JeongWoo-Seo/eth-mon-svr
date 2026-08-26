@@ -14,4 +14,7 @@ proto:
 	   --go-grpc_out=paths=source_relative:./internal/pb \
 	   ./api/proto/*.proto
 
-.PHONY: server proto
+test:
+	go test ./...
+
+.PHONY: server proto test
