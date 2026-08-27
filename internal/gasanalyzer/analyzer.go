@@ -22,6 +22,17 @@ const (
 	lamda  float64 = 0.7
 )
 
+//go:generate mockgen -destination=mocks/mock_pending_pool.go -package=mocks . PendingPool
+//go:generate mockgen -destination=mocks/mock_gas_prediction_client.go -package=mocks . GasPredictionClient
+type PendingPool interface {
+	Snapshot() []mempool.PendingTx
+}
+
+// GasPredictionClient is the subset of grpcClient.GasPredictionClient used by the analyzer.
+type GasPredictionClient interface {
+	GasPredictResultSend(req *pb.GasPredictionStream)
+}
+
 type Analyzer struct {
 	DecayTable [MaxAge + 1]float64
 	mu         sync.RWMutex
@@ -31,8 +42,8 @@ type Analyzer struct {
 	latestBlockData BlockAnalysisData
 	ready           bool
 
-	pendingPool *mempool.PendingMemPool
-	grpcClient  *grpcClient.GasPredictionClient
+	pendingPool PendingPool
+	grpcClient  GasPredictionClient
 }
 
 func NewAnalyzer(pendingPool *mempool.PendingMemPool, grpcClient *grpcClient.GasPredictionClient) *Analyzer {

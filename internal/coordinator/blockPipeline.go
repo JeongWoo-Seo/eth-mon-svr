@@ -19,7 +19,8 @@ const (
 	wakeupBufferSize      = 1
 )
 
-type blockProc interface {
+//go:generate mockgen -destination=mocks/mock_block_processor.go -package=mocks . BlockProcessor
+type BlockProcessor interface {
 	ProcessBlock(ctx context.Context, header *types.Header) error
 	Initialize(ctx context.Context) (*types.Header, error)
 	HeaderByNumber(ctx context.Context, number uint64) (*types.Header, error)
@@ -29,7 +30,7 @@ type blockProc interface {
 }
 
 type blockPipeline struct {
-	proc            blockProc
+	proc            BlockProcessor
 	headerChan      chan *types.Header
 	failedBlockChan chan *types.Header
 	wakeupChan      chan struct{}

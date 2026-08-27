@@ -18,13 +18,14 @@ const (
 	txBufferSize       = 50000
 )
 
-type pendingProc interface {
+//go:generate mockgen -destination=mocks/mock_pending_processor.go -package=mocks . PendingProcessor
+type PendingProcessor interface {
 	GetTxInfo(ctx context.Context, hashes []common.Hash)
 }
 
 type pendingPipeline struct {
 	workers int
-	proc    pendingProc
+	proc    PendingProcessor
 	jobs    chan common.Hash
 
 	wg sync.WaitGroup
