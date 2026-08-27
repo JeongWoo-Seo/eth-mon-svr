@@ -8,6 +8,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/spf13/viper v1.21.0
+	go.uber.org/mock v0.6.0
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.77.0
 	google.golang.org/protobuf v1.36.11

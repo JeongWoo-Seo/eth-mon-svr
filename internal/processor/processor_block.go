@@ -55,9 +55,7 @@ func (p *Process) fetchReceiptsBatch(ctx context.Context, txs types.Transactions
 			CU:  chunkSize * receiptCuPerTx,
 			RPC: chunkSize,
 		}
-		err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
-			return client.Client().BatchCallContext(ctx, chunkElems)
-		})
+		err := p.rpcManager.FetchBatch(ctx, cost, chunkElems)
 		if err != nil {
 			logger.Error(ctx, "Failed to fetch receipts batch chunk",
 				err,
@@ -185,11 +183,12 @@ func (p *Process) UpdateBlockInfoForAnalysis(header *types.Header) {
 	}
 	pool := make([]gasanalyzer.WeightedTip, 0, len(blockData)*300)
 
+	decayTable := p.gasanalyzer.DecayValues()
 	for i, b := range blockData {
-		if i >= len(p.gasanalyzer.DecayTable) {
+		if i >= len(decayTable) {
 			break
 		}
-		decay := p.gasanalyzer.DecayTable[i]
+		decay := decayTable[i]
 
 		for _, tx := range b.Txs {
 			pool = append(pool, gasanalyzer.WeightedTip{

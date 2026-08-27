@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type RPCManager struct {
@@ -119,4 +120,10 @@ func (r *RPCManager) EthClientFunc(ctx context.Context, cost RPCCost, fn func(cl
 	}
 
 	return fmt.Errorf("all rpc providers failed")
+}
+
+func (r *RPCManager) FetchBatch(ctx context.Context, cost RPCCost, elems []rpc.BatchElem) error {
+	return r.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
+		return client.Client().BatchCallContext(ctx, elems)
+	})
 }

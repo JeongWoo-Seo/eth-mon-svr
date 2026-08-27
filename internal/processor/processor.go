@@ -32,11 +32,11 @@ const (
 )
 
 type Process struct {
-	pendingPool *mempool.PendingMemPool
+	pendingPool PendingPool
 	blockstore  *blockstore.Store
-	rpcManager  *rpcmanager.RPCManager
-	gasanalyzer *gasanalyzer.Analyzer
-	grpcClient  *grpcClient.GasPredictionClient
+	rpcManager  RPCManager
+	gasanalyzer GasAnalyzer
+	grpcClient  GasPredictionClient
 
 	mu sync.RWMutex
 }
@@ -81,9 +81,7 @@ func (p *Process) GetTxInfo(ctx context.Context, hashes []common.Hash) {
 			RPC: chunkSize,
 		}
 		// tx 정보 요청
-		err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
-			return client.Client().BatchCallContext(ctx, chunkElems)
-		})
+		err := p.rpcManager.FetchBatch(ctx, cost, chunkElems)
 		if err != nil {
 			logger.Error(ctx, "Failed to get tx info chunk",
 				err,
