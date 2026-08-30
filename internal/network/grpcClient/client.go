@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	gasPredictionBufferSize = 300
+	gasPredictionBufferSize = 3
 	feeBucketBufferSize     = 1
 	streamReconnectDelay    = 2 * time.Second
 	unaryRetryDelay         = 2 * time.Second
@@ -214,11 +214,25 @@ func (c *GasPredictionClient) GasPredictResultSend(req *pb.GasPredictionStream) 
 func (c *GasPredictionClient) enqueue(req *pb.GasPredictionStream) {
 	select {
 	case c.GasPredictCh <- req:
+		return
 
-	// 버퍼가 가득찰 경우
 	default:
-		logger.Warn(context.Background(), "send channel full and GasPredictionRequest dropp the data",
-			slog.String("system", "grpc client"))
+		// 오래된 데이터 제거
+		select {
+		case <-c.GasPredictCh:
+		default:
+		}
+
+		// 최신 데이터 추가
+		select {
+		case c.GasPredictCh <- req:
+		default:
+			logger.Warn(
+				context.Background(),
+				"failed to enqueue latest gas prediction",
+				slog.String("system", "grpc client"),
+			)
+		}
 	}
 }
 
