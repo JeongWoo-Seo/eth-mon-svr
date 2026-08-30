@@ -16,4 +16,17 @@ service GasPredictionService {
 message CommonResponse {
     bool success = 1;
     string message = 2;
+    ResponseCode code = 3;
+}
+
+enum ResponseCode {
+    RESPONSE_CODE_UNSPECIFIED = 0;
+
+    SUCCESS = 1;
+
+    INVALID_REQUEST = 2;
+    INVALID_DATA = 3;
+
+    INTERNAL_ERROR = 4;
+    SERVICE_UNAVAILABLE = 5;
 }

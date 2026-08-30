@@ -268,20 +268,35 @@ func (c *GasPredictionClient) sendFeeBucket(ctx context.Context, req *pb.FeeStat
 			return ctx.Err()
 		}
 
-		_, err := c.client.UploadFeeBuckets(ctx, req)
-		if err == nil {
+		res, err := c.client.UploadFeeBuckets(ctx, req)
+		if err != nil {
+			lastErr = err
+			// 전송 실패 시 retry
+			logger.Error(ctx, "failed to send fee statistics and retry",
+				err,
+				slog.String("system", "grpc client"),
+				slog.Int("attempt", attempt))
+		} else if res == nil {
+			lastErr = errors.New("empty response from UploadFeeBuckets")
+		} else if !res.Success {
+			lastErr = fmt.Errorf("fee statistics rejected by server: %s", res.Message)
+
+			if res.Code == pb.ResponseCode_INVALID_REQUEST {
+				return lastErr
+			}
+
+			logger.Error(ctx, "fee statistics rejected by server",
+				lastErr,
+				slog.String("system", "grpc client"),
+				slog.Int("attempt", attempt),
+				slog.String("message", res.Message),
+			)
+		} else {
 			logger.Info(ctx, "fee statistics sent successfully",
 				slog.String("system", "grpc client"))
 
 			return nil
 		}
-
-		lastErr = err
-		// 전송 실패 시 retry
-		logger.Error(ctx, "failed to send fee statistics and retry",
-			err,
-			slog.String("system", "grpc client"),
-			slog.Int("attempt", attempt))
 
 		if attempt == maxFeeBucketAttempts {
 			break

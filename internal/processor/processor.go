@@ -319,45 +319,52 @@ func (p *Process) CompareFeeHistory(ctx context.Context) {
 	}
 
 	//결과 비교
-	if len(history.Reward) > 0 && len(history.BaseFee) >= 2 {
-		reward := history.Reward[0]
-
-		for i, t := range gasanalyzer.GasPredictionTargets {
-
-			actualTip := reward[i].Uint64()
-
-			if _, ok := preResult.AnalyzerBlock[t.Name]; ok {
-				anaBlock := int64(preResult.AnalyzerBlock[t.Name].PriorityFee)
-				anaPending := int64(preResult.AnalyzerPending[t.Name].PriorityFee)
-
-				blend := int64(preResult.PredictResult[t.Name].PriorityFee)
-				diff := blend - int64(actualTip)
-
-				sAnaBlock := humanize.Comma(anaBlock)
-				sAnaPending := humanize.Comma(anaPending)
-				sBlend := humanize.Comma(blend)
-				sActual := humanize.Comma(int64(actualTip))
-				sDiff := humanize.Comma(diff)
-				if diff > 0 {
-					sDiff = "+" + sDiff // 양수일 때 +
-				}
-
-				fmt.Printf(
-					"%-10s | %-14s | %-14s | %-14s | %-14s | %-12s\n",
-					t.Name,
-					sAnaBlock,
-					sAnaPending,
-					sBlend,
-					sActual,
-					sDiff,
-				)
-
-			} else {
-				fmt.Printf(
-					"%-10s | 데이터 없음\n", t.Name)
-			}
-		}
-
-		fmt.Printf("BaseFee - 예측 : %d 실제 : %d \n", preResult.NextBaseFee, history.BaseFee[0].Uint64())
+	if len(history.Reward) == 0 || len(history.BaseFee) < 2 {
+		return
 	}
+
+	reward := history.Reward[0]
+
+	if len(reward) < len(gasanalyzer.GasPredictionTargets) {
+		return
+	}
+
+	for i, t := range gasanalyzer.GasPredictionTargets {
+
+		actualTip := reward[i].Uint64()
+
+		if _, ok := preResult.AnalyzerBlock[t.Name]; ok {
+			anaBlock := int64(preResult.AnalyzerBlock[t.Name].PriorityFee)
+			anaPending := int64(preResult.AnalyzerPending[t.Name].PriorityFee)
+
+			blend := int64(preResult.PredictResult[t.Name].PriorityFee)
+			diff := blend - int64(actualTip)
+
+			sAnaBlock := humanize.Comma(anaBlock)
+			sAnaPending := humanize.Comma(anaPending)
+			sBlend := humanize.Comma(blend)
+			sActual := humanize.Comma(int64(actualTip))
+			sDiff := humanize.Comma(diff)
+			if diff > 0 {
+				sDiff = "+" + sDiff // 양수일 때 +
+			}
+
+			fmt.Printf(
+				"%-10s | %-14s | %-14s | %-14s | %-14s | %-12s\n",
+				t.Name,
+				sAnaBlock,
+				sAnaPending,
+				sBlend,
+				sActual,
+				sDiff,
+			)
+
+		} else {
+			fmt.Printf(
+				"%-10s | 데이터 없음\n", t.Name)
+		}
+	}
+
+	fmt.Printf("BaseFee - 예측 : %d 실제 : %d \n", preResult.NextBaseFee, history.BaseFee[0].Uint64())
+
 }

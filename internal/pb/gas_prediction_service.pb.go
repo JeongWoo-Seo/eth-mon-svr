@@ -21,10 +21,69 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ResponseCode int32
+
+const (
+	ResponseCode_RESPONSE_CODE_UNSPECIFIED ResponseCode = 0
+	ResponseCode_SUCCESS                   ResponseCode = 1
+	ResponseCode_INVALID_REQUEST           ResponseCode = 2
+	ResponseCode_INVALID_DATA              ResponseCode = 3
+	ResponseCode_INTERNAL_ERROR            ResponseCode = 4
+	ResponseCode_SERVICE_UNAVAILABLE       ResponseCode = 5
+)
+
+// Enum value maps for ResponseCode.
+var (
+	ResponseCode_name = map[int32]string{
+		0: "RESPONSE_CODE_UNSPECIFIED",
+		1: "SUCCESS",
+		2: "INVALID_REQUEST",
+		3: "INVALID_DATA",
+		4: "INTERNAL_ERROR",
+		5: "SERVICE_UNAVAILABLE",
+	}
+	ResponseCode_value = map[string]int32{
+		"RESPONSE_CODE_UNSPECIFIED": 0,
+		"SUCCESS":                   1,
+		"INVALID_REQUEST":           2,
+		"INVALID_DATA":              3,
+		"INTERNAL_ERROR":            4,
+		"SERVICE_UNAVAILABLE":       5,
+	}
+)
+
+func (x ResponseCode) Enum() *ResponseCode {
+	p := new(ResponseCode)
+	*p = x
+	return p
+}
+
+func (x ResponseCode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResponseCode) Descriptor() protoreflect.EnumDescriptor {
+	return file_gas_prediction_service_proto_enumTypes[0].Descriptor()
+}
+
+func (ResponseCode) Type() protoreflect.EnumType {
+	return &file_gas_prediction_service_proto_enumTypes[0]
+}
+
+func (x ResponseCode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResponseCode.Descriptor instead.
+func (ResponseCode) EnumDescriptor() ([]byte, []int) {
+	return file_gas_prediction_service_proto_rawDescGZIP(), []int{0}
+}
+
 type CommonResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Code          ResponseCode           `protobuf:"varint,3,opt,name=code,proto3,enum=gas_monitoring.ResponseCode" json:"code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -73,14 +132,29 @@ func (x *CommonResponse) GetMessage() string {
 	return ""
 }
 
+func (x *CommonResponse) GetCode() ResponseCode {
+	if x != nil {
+		return x.Code
+	}
+	return ResponseCode_RESPONSE_CODE_UNSPECIFIED
+}
+
 var File_gas_prediction_service_proto protoreflect.FileDescriptor
 
 const file_gas_prediction_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgas_prediction_service.proto\x12\x0egas_monitoring\x1a\x14gas_prediction.proto\x1a\x10fee_bucket.proto\"D\n" +
+	"\x1cgas_prediction_service.proto\x12\x0egas_monitoring\x1a\x14gas_prediction.proto\x1a\x10fee_bucket.proto\"v\n" +
 	"\x0eCommonResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\xd8\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
+	"\x04code\x18\x03 \x01(\x0e2\x1c.gas_monitoring.ResponseCodeR\x04code*\x8e\x01\n" +
+	"\fResponseCode\x12\x1d\n" +
+	"\x19RESPONSE_CODE_UNSPECIFIED\x10\x00\x12\v\n" +
+	"\aSUCCESS\x10\x01\x12\x13\n" +
+	"\x0fINVALID_REQUEST\x10\x02\x12\x10\n" +
+	"\fINVALID_DATA\x10\x03\x12\x12\n" +
+	"\x0eINTERNAL_ERROR\x10\x04\x12\x17\n" +
+	"\x13SERVICE_UNAVAILABLE\x10\x052\xd8\x01\n" +
 	"\x14GasPredictionService\x12f\n" +
 	"\x14UploadGasPredictions\x12#.gas_monitoring.GasPredictionStream\x1a%.gas_monitoring.GasPredictionResponse(\x010\x01\x12X\n" +
 	"\x10UploadFeeBuckets\x12$.gas_monitoring.FeeStatisticsRequest\x1a\x1e.gas_monitoring.CommonResponseB1Z/github.com/JeongWoo-Seo/eth-mon-svr/internal/pbb\x06proto3"
@@ -97,23 +171,26 @@ func file_gas_prediction_service_proto_rawDescGZIP() []byte {
 	return file_gas_prediction_service_proto_rawDescData
 }
 
+var file_gas_prediction_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_gas_prediction_service_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gas_prediction_service_proto_goTypes = []any{
-	(*CommonResponse)(nil),        // 0: gas_monitoring.CommonResponse
-	(*GasPredictionStream)(nil),   // 1: gas_monitoring.GasPredictionStream
-	(*FeeStatisticsRequest)(nil),  // 2: gas_monitoring.FeeStatisticsRequest
-	(*GasPredictionResponse)(nil), // 3: gas_monitoring.GasPredictionResponse
+	(ResponseCode)(0),             // 0: gas_monitoring.ResponseCode
+	(*CommonResponse)(nil),        // 1: gas_monitoring.CommonResponse
+	(*GasPredictionStream)(nil),   // 2: gas_monitoring.GasPredictionStream
+	(*FeeStatisticsRequest)(nil),  // 3: gas_monitoring.FeeStatisticsRequest
+	(*GasPredictionResponse)(nil), // 4: gas_monitoring.GasPredictionResponse
 }
 var file_gas_prediction_service_proto_depIdxs = []int32{
-	1, // 0: gas_monitoring.GasPredictionService.UploadGasPredictions:input_type -> gas_monitoring.GasPredictionStream
-	2, // 1: gas_monitoring.GasPredictionService.UploadFeeBuckets:input_type -> gas_monitoring.FeeStatisticsRequest
-	3, // 2: gas_monitoring.GasPredictionService.UploadGasPredictions:output_type -> gas_monitoring.GasPredictionResponse
-	0, // 3: gas_monitoring.GasPredictionService.UploadFeeBuckets:output_type -> gas_monitoring.CommonResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: gas_monitoring.CommonResponse.code:type_name -> gas_monitoring.ResponseCode
+	2, // 1: gas_monitoring.GasPredictionService.UploadGasPredictions:input_type -> gas_monitoring.GasPredictionStream
+	3, // 2: gas_monitoring.GasPredictionService.UploadFeeBuckets:input_type -> gas_monitoring.FeeStatisticsRequest
+	4, // 3: gas_monitoring.GasPredictionService.UploadGasPredictions:output_type -> gas_monitoring.GasPredictionResponse
+	1, // 4: gas_monitoring.GasPredictionService.UploadFeeBuckets:output_type -> gas_monitoring.CommonResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_gas_prediction_service_proto_init() }
@@ -128,13 +205,14 @@ func file_gas_prediction_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gas_prediction_service_proto_rawDesc), len(file_gas_prediction_service_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_gas_prediction_service_proto_goTypes,
 		DependencyIndexes: file_gas_prediction_service_proto_depIdxs,
+		EnumInfos:         file_gas_prediction_service_proto_enumTypes,
 		MessageInfos:      file_gas_prediction_service_proto_msgTypes,
 	}.Build()
 	File_gas_prediction_service_proto = out.File
