@@ -157,7 +157,7 @@ func TestTokenManager_IsAccessTokenValid(t *testing.T) {
 
 func TestTokenManager_GetAccessToken(t *testing.T) {
 	now := time.Now()
-	validToken := signedJWT(t, jwt.MapClaims{"exp": float64(1700000000)})
+	validToken := signedJWT(t, jwt.MapClaims{"exp": float64(time.Now().Add(time.Hour).Unix())})
 
 	tests := []struct {
 		name        string

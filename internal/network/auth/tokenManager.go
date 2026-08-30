@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -20,7 +23,7 @@ var (
 )
 
 type TokenManager struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	accessToken string
 	expiresAt   time.Time
@@ -29,6 +32,8 @@ type TokenManager struct {
 	clientSecret string
 
 	authClient *AuthGrpcClient
+
+	refresh singleflight.Group
 }
 
 func NewTokenManager(client *AuthGrpcClient, clientId, clientSecret string) (*TokenManager, error) {
@@ -51,14 +56,50 @@ func NewTokenManager(client *AuthGrpcClient, clientId, clientSecret string) (*To
 }
 
 func (m *TokenManager) GetAccessToken(ctx context.Context) (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
 
 	if m.isAccessTokenValid() {
-		return m.accessToken, nil
+		token := m.accessToken
+		m.mu.RUnlock()
+		return token, nil
+	}
+	m.mu.RUnlock()
+
+	result, err, _ := m.refresh.Do("access_token", func() (any, error) {
+		// 다른 goroutine이 이미 갱신했는지 다시 확인
+		m.mu.RLock()
+		if m.isAccessTokenValid() {
+			token := m.accessToken
+			m.mu.RUnlock()
+			return token, nil
+		}
+		m.mu.RUnlock()
+
+		// 네트워크 호출은 lock 없이
+		accessToken, expiresAt, err := m.authenticate(ctx)
+		if err != nil {
+			return "", err
+		}
+
+		// 저장할 때만 lock
+		m.mu.Lock()
+		m.accessToken = accessToken
+		m.expiresAt = expiresAt
+		m.mu.Unlock()
+
+		return accessToken, nil
+	})
+
+	if err != nil {
+		return "", err
 	}
 
-	return m.authenticateLocked(ctx)
+	logger.Info(ctx, "new access token acquired successfully",
+		slog.String("system", "auth"),
+		slog.String("action", "authenticate"),
+	)
+
+	return result.(string), nil
 }
 
 func (m *TokenManager) isAccessTokenValid() bool {
@@ -73,25 +114,22 @@ func (m *TokenManager) isAccessTokenValid() bool {
 	return time.Now().Add(tokenRefreshMargin).Before(m.expiresAt)
 }
 
-func (m *TokenManager) authenticateLocked(ctx context.Context) (string, error) {
+func (m *TokenManager) authenticate(ctx context.Context) (string, time.Time, error) {
 	accessToken, err := m.authClient.Authenticate(ctx, m.clientId, m.clientSecret)
 	if err != nil {
-		return "", fmt.Errorf("failed to authenticate: %w", err)
+		return "", time.Time{}, fmt.Errorf("failed to authenticate: %w", err)
 	}
 
 	if accessToken == "" {
-		return "", ErrAccessTokenEmpty
+		return "", time.Time{}, ErrAccessTokenEmpty
 	}
 
 	expiresAt, err := parseJWTExpiration(accessToken)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse access token expiration: %w", err)
+		return "", time.Time{}, fmt.Errorf("failed to parse access token expiration: %w", err)
 	}
 
-	m.accessToken = accessToken
-	m.expiresAt = expiresAt
-
-	return m.accessToken, nil
+	return accessToken, expiresAt, nil
 }
 
 func parseJWTExpiration(accessToken string) (time.Time, error) {
