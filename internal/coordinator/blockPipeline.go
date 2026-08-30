@@ -261,6 +261,14 @@ func (b *blockPipeline) checkBlockGap(ctx context.Context) {
 			// continue로 하면 handleBlockGap과 procAvailable가 무한 반복할 수 있음
 			return
 		}
+		if header == nil || header.Number == nil {
+			logger.Error(ctx, "backfilled block header is nil",
+				errHeaderNotFound,
+				slog.String("system", "blockpipeline"),
+				slog.Uint64("block_number", num),
+			)
+			return
+		}
 
 		b.mu.Lock()
 		b.pendingBlock[num] = header
@@ -355,6 +363,9 @@ func (b *blockPipeline) checkStale(ctx context.Context, header *types.Header) (*
 	latest, err := b.proc.HeaderByNumber(ctx, header.Number.Uint64())
 	if err != nil {
 		return nil, false, err
+	}
+	if header == nil || header.Number == nil {
+		return nil, false, errHeaderNotFound
 	}
 
 	if latest.Hash() != header.Hash() {

@@ -3,16 +3,18 @@ package ingestion
 import "time"
 
 const (
-	pendingRotationInterval = 30 * time.Second
-	pendingReadyTimeout     = 5 * time.Second
-	txBufferSize            = 50000
-	txDedupCasheSize        = 10000
+	connectRetryCount = 3
 
-	headerTimeout    = 30 * time.Second
-	watchdogInterval = 10 * time.Second
-	headBufferSize   = 100
+	pendingConnectRetryDelay = 3 * time.Second
+	pendingRotationInterval  = 1 * time.Minute
+	pendingReadyTimeout      = 5 * time.Second
+	txDedupCasheSize         = 10000
+	txBufferSize             = 50000
 
-	reconnectDelay = 1 * time.Second
+	headerTimeout           = 30 * time.Second
+	watchdogInterval        = 10 * time.Second
+	headBufferSize          = 100
+	headerConnectRetryDelay = 1 * time.Second
 )
 
 const (

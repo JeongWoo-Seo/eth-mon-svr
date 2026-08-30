@@ -65,7 +65,7 @@ func (s *Subscriber) runHeaderSub(ctx context.Context) {
 		}
 
 		//reconnect delay
-		timer := time.NewTimer(reconnectDelay)
+		timer := time.NewTimer(headerConnectRetryDelay)
 
 		select {
 		case <-ctx.Done():
@@ -75,6 +75,51 @@ func (s *Subscriber) runHeaderSub(ctx context.Context) {
 		case <-timer.C:
 		}
 	}
+}
+
+func (s *Subscriber) connectInitialHeader(ctx context.Context) (Provider, error) {
+	var lastErr error
+
+	for _, provider := range s.providers {
+		for i := 1; i <= connectRetryCount; i++ {
+			if ctx.Err() != nil {
+				return Provider{}, ctx.Err()
+			}
+
+			logger.Info(ctx, "starting ethereum header subscription",
+				slog.String("system", "ethereum"),
+				slog.String("action", "subscribe"),
+				slog.String("subscription", "Header"),
+				slog.String("provider", provider.Name),
+				slog.Int("attempt", i),
+			)
+
+			err := s.connectHeadAndStream(ctx, provider)
+			if err == nil {
+				return provider, nil
+			}
+
+			lastErr = err
+
+			if i < connectRetryCount {
+				select {
+				case <-ctx.Done():
+					return Provider{}, ctx.Err()
+
+				case <-time.After(headerConnectRetryDelay):
+				}
+			}
+		}
+
+		logger.Error(ctx, "block provider exhausted retries",
+			lastErr,
+			slog.String("system", "ethereum"),
+			slog.String("action", "subscribe"),
+			slog.String("provider", provider.Name),
+		)
+	}
+
+	return Provider{}, lastErr
 }
 
 func (s *Subscriber) connectHeadAndStream(ctx context.Context, provider Provider) error {
@@ -116,8 +161,8 @@ func consumeHeaderStream(
 	lastHeaderAt := time.Now()
 
 	//headerTimeout = 30 , 10 초단위로 확인
-	watchdog := time.NewTimer(watchdogInterval)
-	defer watchdog.Stop()
+	ticker := time.NewTicker(watchdogInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -138,9 +183,9 @@ func consumeHeaderStream(
 			lastHeaderAt = time.Now()
 			push(header)
 
-		case <-watchdog.C:
+		case <-ticker.C:
 			if time.Since(lastHeaderAt) >= headerTimeout {
-				return fmt.Errorf("%w: provider=%s last_header=%s", errHeaderTimeout, provider.Name, lastHeaderAt.Format(time.RFC3339))
+				return fmt.Errorf("%w: provider=%s last_header=%s", errHeaderTimeout, provider.Name, lastHeaderAt)
 			}
 		}
 	}

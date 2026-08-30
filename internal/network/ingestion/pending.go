@@ -2,6 +2,7 @@ package ingestion
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -23,7 +24,7 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 	// 첫번째 provider 적용
 	curProvider := s.providers[0]
 
-	session, err := s.startPendingSession(ctx, curProvider)
+	session, err := s.connectInitialPendingSession(ctx)
 	if err != nil {
 		logger.Error(ctx, "initial pending session failed",
 			err,
@@ -31,6 +32,8 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 			slog.String("action", "subscribe"),
 			slog.String("Provider", curProvider.Name),
 		)
+
+		s.reportFatal(fmt.Errorf("initial pending subscription failed: %w", err))
 		return
 	}
 
@@ -131,11 +134,55 @@ func (s *Subscriber) runPendingSub(ctx context.Context) {
 				select {
 				case <-ctx.Done():
 					return
-				case <-time.After(3 * time.Second):
+				case <-time.After(pendingConnectRetryDelay):
 				}
 			}
 		}
 	}
+}
+
+func (s *Subscriber) connectInitialPendingSession(ctx context.Context) (*pendingSession, error) {
+	var lastErr error
+
+	for _, provider := range s.providers {
+		for i := 1; i <= connectRetryCount; i++ {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+
+			logger.Info(ctx, "trying pending provider",
+				slog.String("system", "ethereum"),
+				slog.String("action", "subscribe"),
+				slog.String("provider", provider.Name),
+				slog.Int("attempt", i),
+			)
+
+			session, err := s.startPendingSession(ctx, provider)
+			if err == nil {
+				return session, nil
+			}
+
+			lastErr = err
+
+			if i < connectRetryCount {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+
+				case <-time.After(pendingConnectRetryDelay):
+				}
+			}
+		}
+
+		logger.Error(ctx, "pending provider exhausted retries",
+			lastErr,
+			slog.String("system", "ethereum"),
+			slog.String("action", "subscribe"),
+			slog.String("provider", provider.Name),
+		)
+	}
+
+	return nil, lastErr
 }
 
 func (s *Subscriber) handoverPending(ctx context.Context, old *pendingSession, firstProvider Provider) (*pendingSession, bool) {

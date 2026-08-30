@@ -62,9 +62,10 @@ func main() {
 	//////////////////////////
 	authGrpcClient, err := auth.NewAuthGrpcClient(cfg.GrpcServerAddr)
 	if err != nil {
-		logger.Error(ctx, "fail to connet auth gRPC ",
+		logger.Error(ctx, "fail to connect auth gRPC ",
 			err,
 			slog.String("system", "grpc client"))
+		panic(err)
 	}
 	defer authGrpcClient.Close()
 
@@ -73,6 +74,7 @@ func main() {
 		logger.Error(ctx, "fail to generate token manager",
 			err,
 			slog.String("system", "grpc client"))
+		panic(err)
 	}
 
 	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(ctx, cfg.GrpcServerAddr, tokenManager)
@@ -80,6 +82,7 @@ func main() {
 		logger.Error(ctx, "fail to connet gRPC ",
 			err,
 			slog.String("system", "grpc client"))
+		panic(err)
 	}
 	defer cleanup()
 
@@ -127,7 +130,14 @@ func main() {
 	//////////////////////////
 	// server shutdown
 	//////////////////////////
-	<-ctx.Done()
+	select {
+	case err := <-sub.Err():
+		logger.Error(ctx, "subscriber fatal error", err)
+		stop()
+
+	case <-ctx.Done():
+	}
+
 	logger.Info(context.Background(), "shutdown requested")
 
 	sub.Wait()
