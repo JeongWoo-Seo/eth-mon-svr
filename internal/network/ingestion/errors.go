@@ -9,4 +9,6 @@ var (
 	errPendingChannelClose        = errors.New("pending channel closed")
 	errPendingSubscriptionTimeout = errors.New("pending Subscription timeout")
 	errPendingSwitchChannelClose  = errors.New("pending channel switch closed")
+
+	errNoEthereumProviders = errors.New("no ethereum providers available")
 )

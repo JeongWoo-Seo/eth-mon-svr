@@ -14,15 +14,39 @@ import (
 //header
 
 func (s *Subscriber) runHeaderSub(ctx context.Context) {
-	currentProvider := ProviderChainstack
+	if len(s.providers) == 0 {
+		logger.Error(ctx, "header subscription unavailable",
+			errNoEthereumProviders,
+			slog.String("system", "ethereum"),
+			slog.String("action", "subscribe"),
+			slog.String("subscription", "Header"),
+		)
+		s.reportFatal(errNoEthereumProviders)
+		return
+	}
+
+	currentProvider := s.providers[0].Name
+
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 
 		provider, ok := s.provider(currentProvider)
-		if !ok {
-			currentProvider = ProviderAlchemy
+		if !ok || provider.Name == "" {
+			nextProvider, ok := s.alternateProvider(currentProvider)
+			if !ok {
+				logger.Error(ctx, "no available ethereum provider",
+					errNoEthereumProviders,
+					slog.String("system", "ethereum"),
+					slog.String("action", "subscribe"),
+					slog.String("subscription", "Header"),
+				)
+
+				s.reportFatal(errNoEthereumProviders)
+				return
+			}
+			currentProvider = nextProvider.Name
 			continue
 		}
 
@@ -54,9 +78,7 @@ func (s *Subscriber) runHeaderSub(ctx context.Context) {
 			// block 변경을 pending 관리에 알림
 			s.notifyPendingSwitch(nextProvider.Name)
 
-			logger.Info(
-				ctx,
-				"change ethereum provider",
+			logger.Info(ctx, "change ethereum provider",
 				slog.String("system", "ethereum"),
 				slog.String("action", "change network"),
 				slog.String("from", provider.Name),

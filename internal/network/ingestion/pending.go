@@ -22,6 +22,10 @@ type pendingSession struct {
 
 func (s *Subscriber) runPendingSub(ctx context.Context) {
 	// 첫번째 provider 적용
+	if len(s.providers) == 0 {
+		s.reportFatal(errNoEthereumProviders)
+		return
+	}
 	curProvider := s.providers[0]
 
 	session, err := s.connectInitialPendingSession(ctx)
