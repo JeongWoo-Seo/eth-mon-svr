@@ -18,8 +18,7 @@ import (
 )
 
 const (
-	MaxAge         = 20
-	lamda  float64 = 0.7
+	lamda float64 = 0.7
 )
 
 //go:generate mockgen -destination=mocks/mock_pending_pool.go -package=mocks . PendingPool
@@ -34,7 +33,7 @@ type GasPredictionClient interface {
 }
 
 type Analyzer struct {
-	DecayTable [MaxAge + 1]float64
+	DecayTable []float64
 	mu         sync.RWMutex
 	runMu      sync.Mutex // 분석 작업과 Clear/Resync의 lifecycle 보호
 
@@ -46,14 +45,15 @@ type Analyzer struct {
 	grpcClient  GasPredictionClient
 }
 
-func NewAnalyzer(pendingPool *mempool.PendingMemPool, grpcClient *grpcClient.GasPredictionClient) *Analyzer {
+func NewAnalyzer(pendingPool *mempool.PendingMemPool, grpcClient *grpcClient.GasPredictionClient, maxBlockCount int) *Analyzer {
 	a := &Analyzer{
 		ready:       false,
 		pendingPool: pendingPool,
 		grpcClient:  grpcClient,
+		DecayTable:  make([]float64, maxBlockCount),
 	}
 
-	for age := 0; age < MaxAge; age++ {
+	for age := 0; age < maxBlockCount; age++ {
 		a.DecayTable[age] = math.Exp(-lamda * float64(age))
 	}
 
