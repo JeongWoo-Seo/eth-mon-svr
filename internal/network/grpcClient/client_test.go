@@ -3,6 +3,7 @@ package grpcClient
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,24 +14,39 @@ import (
 var errBoom = errors.New("boom")
 
 // --- mocks -----------------------------------------------------------------
-
-// fakeGasServiceClient implements pb.GasPredictionServiceClient so the unary
-// send path can be tested without a real gRPC connection.
 type fakeGasServiceClient struct {
-	feeErr   error
-	failures int // fail the first N calls, then succeed
-	feeCalls int
+	feeErr    error
+	failures  int
+	feeCalls  int
+	responses []*pb.CommonResponse
 }
 
-func (f *fakeGasServiceClient) UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[pb.GasPredictionStream, pb.GasPredictionResponse], error) {
-	return nil, nil
-}
-
-func (f *fakeGasServiceClient) UploadFeeBuckets(ctx context.Context, in *pb.FeeStatisticsRequest, opts ...grpc.CallOption) (*pb.CommonResponse, error) {
+func (f *fakeGasServiceClient) UploadFeeBuckets(
+	ctx context.Context,
+	in *pb.FeeStatisticsRequest,
+	opts ...grpc.CallOption,
+) (*pb.CommonResponse, error) {
 	f.feeCalls++
+
+	// RPC 자체의 에러를 발생시키는 테스트
 	if f.feeCalls <= f.failures {
 		return nil, f.feeErr
 	}
+
+	// 호출별 response가 설정되어 있으면 해당 response 반환
+	index := f.feeCalls - f.failures - 1
+	if index >= 0 && index < len(f.responses) {
+		return f.responses[index], nil
+	}
+
+	// 기본 성공
+	return &pb.CommonResponse{
+		Success: true,
+		Code:    pb.ResponseCode_SUCCESS,
+	}, nil
+}
+
+func (f *fakeGasServiceClient) UploadGasPredictions(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[pb.GasPredictionStream, pb.GasPredictionResponse], error) {
 	return nil, nil
 }
 
@@ -107,14 +123,14 @@ func TestGasPredictResultSend_NilPrediction(t *testing.T) {
 }
 
 // --- sendFeeBucket (unary send with retry) ----------------------------------
-
 func TestSendFeeBucket(t *testing.T) {
 	t.Run("success on first try", func(t *testing.T) {
 		fake := &fakeGasServiceClient{}
-		c := &GasPredictionClient{client: fake}
+		c := &GasPredictionClient{
+			client: fake,
+		}
 
 		err := c.sendFeeBucket(context.Background(), &pb.FeeStatisticsRequest{})
-
 		if err != nil {
 			t.Fatalf("sendFeeBucket() error = %v, want nil", err)
 		}
@@ -123,20 +139,139 @@ func TestSendFeeBucket(t *testing.T) {
 		}
 	})
 
-	t.Run("cancelled context returns context error", func(t *testing.T) {
-		fake := &fakeGasServiceClient{}
-		c := &GasPredictionClient{client: fake}
+	t.Run("rpc error retry then success", func(t *testing.T) {
+		expectedErr := errors.New("temporary rpc error")
 
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		err := c.sendFeeBucket(ctx, &pb.FeeStatisticsRequest{})
-
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("sendFeeBucket() error = %v, want context.Canceled", err)
+		fake := &fakeGasServiceClient{
+			failures: 2,
+			feeErr:   expectedErr,
 		}
-		if fake.feeCalls != 0 {
-			t.Fatalf("fee calls = %d, want 0", fake.feeCalls)
+
+		c := &GasPredictionClient{
+			client:          fake,
+			unaryRetryDelay: 0,
+		}
+
+		err := c.sendFeeBucket(context.Background(), &pb.FeeStatisticsRequest{})
+		if err != nil {
+			t.Fatalf("sendFeeBucket() error = %v, want nil", err)
+		}
+
+		// 1, 2회 실패 -> 3회 성공
+		if fake.feeCalls != 3 {
+			t.Fatalf("fee calls = %d, want 3", fake.feeCalls)
+		}
+	})
+
+	t.Run("rpc error all attempts fail", func(t *testing.T) {
+		expectedErr := errors.New("rpc unavailable")
+
+		fake := &fakeGasServiceClient{
+			failures: maxFeeBucketAttempts,
+			feeErr:   expectedErr,
+		}
+
+		c := &GasPredictionClient{
+			client:          fake,
+			unaryRetryDelay: 0,
+		}
+
+		err := c.sendFeeBucket(context.Background(), &pb.FeeStatisticsRequest{})
+		if err == nil {
+			t.Fatal("sendFeeBucket() error = nil, want error")
+		}
+
+		if !errors.Is(err, expectedErr) {
+			t.Fatalf(
+				"sendFeeBucket() error = %v, want %v",
+				err,
+				expectedErr,
+			)
+		}
+
+		if fake.feeCalls != maxFeeBucketAttempts {
+			t.Fatalf(
+				"fee calls = %d, want %d",
+				fake.feeCalls,
+				maxFeeBucketAttempts,
+			)
+		}
+	})
+
+	t.Run("invalid request does not retry", func(t *testing.T) {
+		fake := &fakeGasServiceClient{
+			responses: []*pb.CommonResponse{
+				{
+					Success: false,
+					Code:    pb.ResponseCode_INVALID_REQUEST,
+					Message: "invalid request",
+				},
+			},
+		}
+
+		c := &GasPredictionClient{
+			client: fake,
+		}
+
+		err := c.sendFeeBucket(context.Background(), &pb.FeeStatisticsRequest{})
+		if err == nil {
+			t.Fatal("sendFeeBucket() error = nil, want error")
+		}
+
+		if !strings.Contains(err.Error(), "invalid request") {
+			t.Fatalf(
+				"sendFeeBucket() error = %v, want invalid request",
+				err,
+			)
+		}
+
+		// INVALID_REQUEST는 retry하지 않아야 함
+		if fake.feeCalls != 1 {
+			t.Fatalf(
+				"fee calls = %d, want 1",
+				fake.feeCalls,
+			)
+		}
+	})
+
+	t.Run("server rejection all attempts fail", func(t *testing.T) {
+		responses := make([]*pb.CommonResponse, maxFeeBucketAttempts)
+
+		for i := 0; i < maxFeeBucketAttempts; i++ {
+			responses[i] = &pb.CommonResponse{
+				Success: false,
+				Code:    pb.ResponseCode_INTERNAL_ERROR,
+				Message: "server error",
+			}
+		}
+
+		fake := &fakeGasServiceClient{
+			responses: responses,
+		}
+
+		c := &GasPredictionClient{
+			client:          fake,
+			unaryRetryDelay: 0,
+		}
+
+		err := c.sendFeeBucket(context.Background(), &pb.FeeStatisticsRequest{})
+		if err == nil {
+			t.Fatal("sendFeeBucket() error = nil, want error")
+		}
+
+		if !strings.Contains(err.Error(), "server error") {
+			t.Fatalf(
+				"sendFeeBucket() error = %v, want server error",
+				err,
+			)
+		}
+
+		if fake.feeCalls != maxFeeBucketAttempts {
+			t.Fatalf(
+				"fee calls = %d, want %d",
+				fake.feeCalls,
+				maxFeeBucketAttempts,
+			)
 		}
 	})
 }

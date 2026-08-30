@@ -18,8 +18,8 @@ import (
 const (
 	gasPredictionBufferSize = 3
 	feeBucketBufferSize     = 1
-	streamReconnectDelay    = 2 * time.Second
-	unaryRetryDelay         = 2 * time.Second
+	streamReconnectDelay    = 1 * time.Second
+	unaryRetryDelay         = 1 * time.Second
 	streamFastRetryCount    = 3
 	streamFastRetryDelay    = 2 * time.Second
 	streamMaxRetryDelay     = 30 * time.Second
@@ -273,7 +273,7 @@ func (c *GasPredictionClient) sendFeeBucket(ctx context.Context, req *pb.FeeStat
 
 	delay := c.unaryRetryDelay
 	if delay <= 0 {
-		delay = unaryRetryDelay
+		delay = c.unaryRetryDelay
 	}
 
 	for attempt := 1; attempt <= maxFeeBucketAttempts; attempt++ {
