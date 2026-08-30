@@ -48,7 +48,6 @@ func (p *pendingPipeline) start(ctx context.Context) {
 }
 
 func (p *pendingPipeline) stop() {
-	close(p.jobs)
 	p.wg.Wait()
 }
 

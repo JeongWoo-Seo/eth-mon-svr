@@ -3,6 +3,7 @@ package gasanalyzer
 import (
 	"math"
 	"math/big"
+	"slices"
 )
 
 func (a *Analyzer) EffectiveTip(feeCap, tipCap, baseFee uint64) (uint64, bool) {
@@ -97,9 +98,6 @@ func (a *Analyzer) CalculateWeightForGasUsed(gasUsed, gasLimit uint64) float64 {
 	//return math.Sqrt(float64(gasUsed))
 }
 
-// DecayValues returns the decay weights used for weighted percentile
-// calculation. It lets Analyzer satisfy the GasAnalyzer interface in the
-// processor package without exposing the DecayTable field directly.
 func (a *Analyzer) DecayValues() []float64 {
-	return a.DecayTable[:]
+	return slices.Clone(a.DecayTable[:])
 }

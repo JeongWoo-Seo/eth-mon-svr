@@ -30,7 +30,6 @@ func NewRpcManager(rpcs map[string]string) (*RPCManager, error) {
 
 		client, err := NewEthClient(provider, url, policy)
 		if err != nil {
-			client.Close()
 			continue
 		}
 		clients = append(clients, client)
