@@ -66,6 +66,11 @@ func LoadConfig() *Config {
 		os.Exit(1)
 	}
 
+	maxBlockCount := raw.MaxBlockCount
+	if maxBlockCount < 1 {
+		maxBlockCount = 1
+	}
+
 	rpcs := map[string]string{
 		rpcmanager.ProviderAlchemy:    raw.AlcHTTP,
 		rpcmanager.ProviderChainstack: raw.ChaHTTP,
@@ -90,7 +95,7 @@ func LoadConfig() *Config {
 		GrpcServerAddr:    raw.GrpcServerAddr,
 		EthSepoliaChainId: raw.EthSepoliaChainId,
 		TxStoreBlockTTL:   raw.TxStoreBlockTTL,
-		MaxBlockCount:     raw.MaxBlockCount,
+		MaxBlockCount:     maxBlockCount,
 		RPCs:              rpcs,
 		WSs:               wss,
 	}
