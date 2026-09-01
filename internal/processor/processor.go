@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
-	"sync"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/blockstore"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/gasanalyzer"
@@ -37,8 +36,6 @@ type Process struct {
 	rpcManager  RPCManager
 	gasanalyzer GasAnalyzer
 	grpcClient  GasPredictionClient
-
-	mu sync.RWMutex
 }
 
 func NewProcess(pendingPool *mempool.PendingMemPool, blockstore *blockstore.Store, rpcManager *rpcmanager.RPCManager,
@@ -83,6 +80,8 @@ func (p *Process) GetTxInfo(ctx context.Context, hashes []common.Hash) {
 		// tx 정보 요청
 		err := p.rpcManager.FetchBatch(ctx, cost, chunkElems)
 		if err != nil {
+			report.IncTxRPCFailed()
+
 			logger.Error(ctx, "Failed to get tx info chunk",
 				err,
 				slog.String("system", "ethereum"),
@@ -95,6 +94,8 @@ func (p *Process) GetTxInfo(ctx context.Context, hashes []common.Hash) {
 		validResults := make([]*types.Transaction, 0, chunkSize)
 		for j := 0; j < chunkSize; j++ {
 			if chunkElems[j].Error != nil {
+				report.IncTxIndividualRPCFailed()
+
 				logger.Warn(ctx, "Failed to fetch individual tx",
 					slog.String("err", chunkElems[j].Error.Error()),
 					slog.String("hash", chunkHashes[j].Hex()))
@@ -115,10 +116,12 @@ func (p *Process) GetTxInfo(ctx context.Context, hashes []common.Hash) {
 
 func (p *Process) ProcessBlock(ctx context.Context, header *types.Header) error {
 	if header == nil {
+		report.IncBlockProcessingFailed()
 		return ErrLatestBlockHeaderNil
 	}
 
 	if header.Number == nil {
+		report.IncBlockProcessingFailed()
 		return fmt.Errorf("%w: hash=%s", ErrLatestBlockNumberNil, header.Hash().Hex())
 	}
 
@@ -130,6 +133,8 @@ func (p *Process) ProcessBlock(ctx context.Context, header *types.Header) error 
 	// tx 영수증 가져오기
 	receipts, err := p.fetchBlockReceipts(ctx, header.Hash().Hex())
 	if err != nil {
+		report.IncBlockReceiptRPCFailed()
+		report.IncBlockProcessingFailed()
 		return fmt.Errorf("failed to fetch receipts block=%d: %w", blockNumber, err)
 	}
 
@@ -200,7 +205,6 @@ func (p *Process) HeaderByNumber(ctx context.Context, number uint64) (*types.Hea
 	// tx 정보 요청
 	err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 		var err error
-		header, err = client.HeaderByNumber(ctx, new(big.Int).SetUint64(number))
 		return err
 	})
 	if err != nil {
@@ -219,6 +223,7 @@ func (p *Process) CleanupFailedBlock(ctx context.Context, header *types.Header) 
 	blockNum := header.Number.Uint64()
 	receipts, err := p.fetchBlockReceipts(ctx, header.Hash().Hex())
 	if err != nil {
+		report.IncBlockReceiptRPCFailed()
 		return fmt.Errorf("failed to fetch receipts block=%d: %w", blockNum, err)
 	}
 
@@ -250,6 +255,7 @@ func (p *Process) Resync(ctx context.Context) (*types.Header, error) {
 
 	receipt, err := p.fetchBlockReceipts(ctx, latest.Hash().Hex())
 	if err != nil {
+		report.IncBlockReceiptRPCFailed()
 		return nil, fmt.Errorf("%w: block=%d hash=%s: %v", ErrBlockReceiptFetch, latest.Number.Uint64(), latest.Hash().Hex(), err)
 	}
 

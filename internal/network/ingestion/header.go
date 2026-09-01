@@ -197,7 +197,11 @@ func consumeHeaderStream(
 			}
 			return err
 
-		case header := <-headers:
+		case header, ok := <-headers:
+			if !ok {
+				return errHeaderChannelClose
+			}
+
 			if header == nil {
 				continue
 			}

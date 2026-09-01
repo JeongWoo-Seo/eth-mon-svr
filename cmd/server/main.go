@@ -125,7 +125,7 @@ func main() {
 	// gas analysis
 	//////////////////////////
 	logger.Info(ctx, "Monitoring server started.")
-	analyzer.Start(ctx)
+	go analyzer.Start(ctx)
 
 	//////////////////////////
 	// server shutdown

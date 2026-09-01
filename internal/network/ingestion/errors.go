@@ -3,6 +3,7 @@ package ingestion
 import "errors"
 
 var (
+	errHeaderChannelClose = errors.New("header channel closed")
 	errHeaderTimeout      = errors.New("ethereum header timeout")
 	errSubscriptionClosed = errors.New("ethereum subscription closed")
 

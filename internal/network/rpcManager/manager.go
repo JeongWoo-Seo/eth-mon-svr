@@ -69,6 +69,7 @@ func (r *RPCManager) Close() {
 
 func (r *RPCManager) EthClientFunc(ctx context.Context, cost RPCCost, fn func(client *ethclient.Client) error) error {
 	now := time.Now()
+	var lastErr error
 
 	r.mu.Lock()
 	if len(r.clients) == 0 {
@@ -92,7 +93,11 @@ func (r *RPCManager) EthClientFunc(ctx context.Context, cost RPCCost, fn func(cl
 		if err := client.Wait(ctx, cost); err == nil {
 			if err := fn(client.EthClient); err == nil {
 				return nil
+			} else {
+				lastErr = err
 			}
+		} else {
+			lastErr = err
 		}
 	}
 
@@ -106,6 +111,7 @@ func (r *RPCManager) EthClientFunc(ctx context.Context, cost RPCCost, fn func(cl
 		}
 
 		if err := nextClient.Wait(ctx, cost); err != nil {
+			lastErr = err
 			continue
 		}
 
@@ -115,10 +121,12 @@ func (r *RPCManager) EthClientFunc(ctx context.Context, cost RPCCost, fn func(cl
 			r.lastRotateAt = time.Now()
 			r.mu.Unlock()
 			return nil
+		} else {
+			lastErr = err
 		}
 	}
 
-	return fmt.Errorf("all rpc providers failed")
+	return fmt.Errorf("all rpc providers failed: %w", lastErr)
 }
 
 func (r *RPCManager) FetchBatch(ctx context.Context, cost RPCCost, elems []rpc.BatchElem) error {
