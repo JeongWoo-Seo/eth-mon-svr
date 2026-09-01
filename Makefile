@@ -5,6 +5,9 @@ MAIN_PATH=./cmd/server/main.go
 server:
 	go run ${MAIN_PATH}
 
+server-tls:
+	go run ${MAIN_PATH} -tls
+
 #    - go_out: 데이터 구조체(struct) 생성 및 상대 경로 지정
 #    - go-grpc_out: gRPC 서비스(service) 인터페이스 생성 및 상대 경로 지정
 proto:
@@ -17,4 +20,4 @@ proto:
 test:
 	go test ./...
 
-.PHONY: server proto test
+.PHONY: server server-tls proto test

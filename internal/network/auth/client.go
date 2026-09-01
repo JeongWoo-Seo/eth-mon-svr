@@ -2,12 +2,22 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+)
+
+const (
+	caCertFile     = "../certs/ca/cert.pem"
+	clientCertFile = "../certs/client/cert.pem"
+	clientKeyFile  = "../certs/client/key.pem"
 )
 
 type AuthGrpcClient struct {
@@ -15,12 +25,49 @@ type AuthGrpcClient struct {
 	conn   *grpc.ClientConn
 }
 
-func NewAuthGrpcClient(addr string) (*AuthGrpcClient, error) {
+func NewAuthGrpcClient(addr string, enableTls bool) (*AuthGrpcClient, error) {
 	if addr == "" {
 		return nil, errors.New("auth grpc server address is empty")
 	}
 
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	var creds credentials.TransportCredentials
+
+	if enableTls {
+		// CA 파일 읽어오기
+		caCert, err := os.ReadFile(caCertFile)
+		if err != nil {
+			return nil, fmt.Errorf("read CA certificate: %w", err)
+		}
+
+		//CA 인증서를 TLS가 신뢰할 수 있는 CA 목록에 등록
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caCert) {
+			return nil, errors.New("failed to append CA certificate")
+		}
+
+		// Client certificate + private key 인증서 생성
+		clientCert, err := tls.LoadX509KeyPair(
+			clientCertFile,
+			clientKeyFile,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("load client certificate: %w", err)
+		}
+
+		tlsConfig := &tls.Config{
+			RootCAs: certPool,
+			Certificates: []tls.Certificate{
+				clientCert,
+			},
+			MinVersion: tls.VersionTLS13,
+		}
+
+		creds = credentials.NewTLS(tlsConfig)
+	} else {
+		creds = insecure.NewCredentials()
+	}
+
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return nil, fmt.Errorf("create auth grpc client: %w", err)
 	}

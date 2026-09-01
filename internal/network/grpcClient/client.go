@@ -2,9 +2,12 @@ package grpcClient
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -12,7 +15,14 @@ import (
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/auth"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/pb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+)
+
+const (
+	caCertFile     = "../certs/ca/cert.pem"
+	clientCertFile = "../certs/client/cert.pem"
+	clientKeyFile  = "../certs/client/key.pem"
 )
 
 const (
@@ -38,8 +48,49 @@ type GasPredictionClient struct {
 	unaryRetryDelay time.Duration
 }
 
-func NewGasPredictClient(ctx context.Context, addr string, tokenManager *auth.TokenManager) (*GasPredictionClient, func(), error) {
-	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+func NewGasPredictClient(ctx context.Context, addr string, tokenManager *auth.TokenManager, enableTls bool) (*GasPredictionClient, func(), error) {
+	if addr == "" {
+		return nil, nil, errors.New("auth grpc server address is empty")
+	}
+
+	var creds credentials.TransportCredentials
+
+	if enableTls {
+		// CA certificate
+		caCert, err := os.ReadFile(caCertFile)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read CA certificate: %w", err)
+		}
+
+		//CA 인증서를 TLS가 신뢰할 수 있는 CA 목록에 등록
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caCert) {
+			return nil, nil, errors.New("failed to append CA certificate")
+		}
+
+		// Client certificate + private key
+		clientCert, err := tls.LoadX509KeyPair(
+			clientCertFile,
+			clientKeyFile,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("load client certificate: %w", err)
+		}
+
+		tlsConfig := &tls.Config{
+			RootCAs: certPool,
+			Certificates: []tls.Certificate{
+				clientCert,
+			},
+			MinVersion: tls.VersionTLS13,
+		}
+
+		creds = credentials.NewTLS(tlsConfig)
+	} else {
+		creds = insecure.NewCredentials()
+	}
+
+	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(creds),
 		grpc.WithUnaryInterceptor(auth.UnaryClientInterceptor(tokenManager)),
 		grpc.WithStreamInterceptor(auth.StreamClientInterceptor(tokenManager)),
 	)
