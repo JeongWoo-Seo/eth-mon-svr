@@ -15,4 +15,5 @@ var (
 
 	//limiter
 	ErrRateLimiterWait = errors.New("rate limiter wait")
+	errHeaderNotFound  = errors.New("header not found")
 )

@@ -5,8 +5,10 @@ import (
 )
 
 const (
-	FeeBucketSize = 500_000_000 // 0.5 Gwei
-	MaxWaitBlock  = 10
+	FeeBucketSize          = 500_000_000 // 0.5 Gwei
+	MaxWaitBlock           = 10
+	TxStoreBlockTTL uint64 = 20
+	MaxBlockCount   int    = 10
 )
 
 type BlockData struct {

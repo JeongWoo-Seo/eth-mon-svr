@@ -93,7 +93,7 @@ func main() {
 	//////////////////////////
 	// set mempool pending and block
 	//////////////////////////
-	pendingPool, poolErr := mempool.NewPendingMemPool(cfg.EthSepoliaChainId, cfg.TxStoreBlockTTL)
+	pendingPool, poolErr := mempool.NewPendingMemPool(cfg.EthSepoliaChainId, blockstore.TxStoreBlockTTL)
 	if poolErr != nil {
 		logger.Error(ctx, "failed to initialize pending pool",
 			err,
@@ -101,14 +101,14 @@ func main() {
 		panic(err)
 	}
 
-	blockPool := blockstore.NewBlockStore(cfg.MaxBlockCount)
+	blockPool := blockstore.NewBlockStore(blockstore.MaxBlockCount)
 
 	//////////////////////////
 	// start processor
 	//////////////////////////
-	analyzer := gasanalyzer.NewAnalyzer(pendingPool, grpcClient, cfg.MaxBlockCount)
+	analyzer := gasanalyzer.NewAnalyzer(pendingPool, grpcClient, blockstore.MaxBlockCount)
 	proc := processor.NewProcess(pendingPool, blockPool, rpcManager, analyzer, grpcClient)
-	coor := coordinator.NewCoordinator(proc, cfg.MaxBlockCount)
+	coor := coordinator.NewCoordinator(proc, blockstore.MaxBlockCount)
 	coor.Start(ctx)
 
 	report.StartReporter(ctx)

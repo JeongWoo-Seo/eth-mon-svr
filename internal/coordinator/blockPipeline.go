@@ -360,6 +360,10 @@ func (b *blockPipeline) handleFailedBlock(ctx context.Context, header *types.Hea
 }
 
 func (b *blockPipeline) checkStale(ctx context.Context, header *types.Header) (*types.Header, bool, error) {
+	if header == nil || header.Number == nil {
+		return nil, false, errHeaderNotFound
+	}
+
 	latest, err := b.proc.HeaderByNumber(ctx, header.Number.Uint64())
 	if err != nil {
 		return nil, false, err

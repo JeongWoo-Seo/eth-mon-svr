@@ -205,10 +205,15 @@ func (p *Process) HeaderByNumber(ctx context.Context, number uint64) (*types.Hea
 	// tx 정보 요청
 	err := p.rpcManager.EthClientFunc(ctx, cost, func(client *ethclient.Client) error {
 		var err error
+		header, err = client.HeaderByNumber(ctx, new(big.Int).SetUint64(number))
 		return err
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if header == nil {
+		return nil, errHeaderNotFound
 	}
 
 	return header, nil

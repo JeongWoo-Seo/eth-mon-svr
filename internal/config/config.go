@@ -1,12 +1,11 @@
 package config
 
 import (
-	"context"
 	"os"
 
-	"github.com/JeongWoo-Seo/eth-mon-svr/internal/logger"
 	"github.com/JeongWoo-Seo/eth-mon-svr/internal/network/ingestion"
 	rpcmanager "github.com/JeongWoo-Seo/eth-mon-svr/internal/network/rpcManager"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/spf13/viper"
 )
 
@@ -19,20 +18,18 @@ type Config struct {
 	GrpcServerAddr    string
 	EthSepoliaChainId string
 
-	TxStoreBlockTTL uint64
-	MaxBlockCount   int
-
 	RPCs map[string]string
 	WSs  []ingestion.Provider
 }
 
+// 외부 설정 파일 / 환경변수와 매핑되는 구조체
 type rawConfig struct {
 	Service          string `mapstructure:"SERVICE"`
 	Env              string `mapstructure:"ENV"`
 	ServerPort       string `mapstructure:"SERVER_PORT"`
 	AuthClientSecret string `mapstructure:"AUTH_CLIENT_SECRET"`
-	GrpcServerAddr   string `mapstructure:"GRPC_SERVER_ADDR"`
 
+	GrpcServerAddr    string `mapstructure:"GRPC_SERVER_ADDR"`
 	EthSepoliaChainId string `mapstructure:"ETH_SEPOLIA_CHAIN_ID"`
 
 	AlcHTTP string `mapstructure:"ETH_ALC_RPC_HTTP_URL"`
@@ -43,39 +40,84 @@ type rawConfig struct {
 
 	InfHTTP string `mapstructure:"ETH_INF_RPC_HTTP_URL"`
 	InfWS   string `mapstructure:"ETH_INF_RPC_WS_URL"`
-
-	TxStoreBlockTTL uint64 `mapstructure:"TX_STORE_BLOCK_TTL"`
-	MaxBlockCount   int    `mapstructure:"MAX_BLOCK_COUNT"`
 }
 
 func LoadConfig() *Config {
-	ctx := context.Background()
-	viper.AddConfigPath(".")
+	// --------------------------------------------------
+	// 1. 로컬 환경에서는 .env 파일 사용
+	// --------------------------------------------------
 	viper.SetConfigFile(".env")
 	viper.SetConfigType("env")
 
-	viper.AutomaticEnv() //환경 변수 자동 매핑
-
 	if err := viper.ReadInConfig(); err != nil {
-		logger.Warn(ctx, "config file not found, using environment variables", "error", err)
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			log.Warn(
+				"failed to read config file",
+				"error", err,
+			)
+		}
 	}
 
+	// --------------------------------------------------
+	// 2. 환경변수 연결
+	//
+	// Docker Compose에서는 container 환경변수가
+	// .env 파일보다 높은 우선순위로 적용됨
+	// --------------------------------------------------
+	envKeys := []string{
+		"SERVICE",
+		"ENV",
+		"SERVER_PORT",
+		"AUTH_CLIENT_SECRET",
+
+		"GRPC_SERVER_ADDR",
+		"ETH_SEPOLIA_CHAIN_ID",
+
+		"ETH_ALC_RPC_HTTP_URL",
+		"ETH_ALC_RPC_WS_URL",
+
+		"ETH_CHA_RPC_HTTP_URL",
+		"ETH_CHA_RPC_WS_URL",
+
+		"ETH_INF_RPC_HTTP_URL",
+		"ETH_INF_RPC_WS_URL",
+	}
+
+	for _, key := range envKeys {
+		if err := viper.BindEnv(key); err != nil {
+			log.Error(
+				"failed to bind environment variable",
+				"key", key,
+				"error", err,
+			)
+			os.Exit(1)
+		}
+	}
+
+	// --------------------------------------------------
+	// 3. 외부 설정 → rawConfig
+	// --------------------------------------------------
 	var raw rawConfig
+
 	if err := viper.Unmarshal(&raw); err != nil {
-		logger.Error(ctx, "failed to unmarshal configuration", err)
+		log.Error(
+			"failed to unmarshal configuration",
+			"error", err,
+		)
 		os.Exit(1)
 	}
 
-	maxBlockCount := raw.MaxBlockCount
-	if maxBlockCount < 1 {
-		maxBlockCount = 1
-	}
-
+	// --------------------------------------------------
+	// 5. RPC 설정 생성
+	// --------------------------------------------------
 	rpcs := map[string]string{
 		rpcmanager.ProviderAlchemy:    raw.AlcHTTP,
 		rpcmanager.ProviderChainstack: raw.ChaHTTP,
 	}
 
+	// --------------------------------------------------
+	// 6. WebSocket Provider 설정 생성
+	// --------------------------------------------------
 	wss := []ingestion.Provider{
 		{
 			Name: rpcmanager.ProviderAlchemy,
@@ -87,6 +129,9 @@ func LoadConfig() *Config {
 		},
 	}
 
+	// --------------------------------------------------
+	// 7. 애플리케이션용 Config 생성
+	// --------------------------------------------------
 	return &Config{
 		Service:           raw.Service,
 		Env:               raw.Env,
@@ -94,9 +139,8 @@ func LoadConfig() *Config {
 		AuthClientSecret:  raw.AuthClientSecret,
 		GrpcServerAddr:    raw.GrpcServerAddr,
 		EthSepoliaChainId: raw.EthSepoliaChainId,
-		TxStoreBlockTTL:   raw.TxStoreBlockTTL,
-		MaxBlockCount:     maxBlockCount,
-		RPCs:              rpcs,
-		WSs:               wss,
+
+		RPCs: rpcs,
+		WSs:  wss,
 	}
 }
