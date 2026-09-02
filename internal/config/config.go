@@ -20,6 +20,11 @@ type Config struct {
 
 	RPCs map[string]string
 	WSs  []ingestion.Provider
+
+	GrpcTLSEnabled    bool
+	GrpcTLSCACert     string
+	GrpcTLSClientCert string
+	GrpcTLSClientKey  string
 }
 
 // 외부 설정 파일 / 환경변수와 매핑되는 구조체
@@ -40,6 +45,11 @@ type rawConfig struct {
 
 	InfHTTP string `mapstructure:"ETH_INF_RPC_HTTP_URL"`
 	InfWS   string `mapstructure:"ETH_INF_RPC_WS_URL"`
+
+	GrpcTLSEnabled    bool   `mapstructure:"GRPC_TLS_ENABLED"`
+	GrpcTLSCACert     string `mapstructure:"GRPC_TLS_CA_CERT"`
+	GrpcTLSClientCert string `mapstructure:"GRPC_TLS_CLIENT_CERT"`
+	GrpcTLSClientKey  string `mapstructure:"GRPC_TLS_CLIENT_KEY"`
 }
 
 func LoadConfig() *Config {
@@ -81,6 +91,11 @@ func LoadConfig() *Config {
 
 		"ETH_INF_RPC_HTTP_URL",
 		"ETH_INF_RPC_WS_URL",
+
+		"GRPC_TLS_ENABLED",
+		"GRPC_TLS_CA_CERT",
+		"GRPC_TLS_CLIENT_CERT",
+		"GRPC_TLS_CLIENT_KEY",
 	}
 
 	for _, key := range envKeys {
@@ -142,5 +157,10 @@ func LoadConfig() *Config {
 
 		RPCs: rpcs,
 		WSs:  wss,
+
+		GrpcTLSEnabled:    raw.GrpcTLSEnabled,
+		GrpcTLSCACert:     raw.GrpcTLSCACert,
+		GrpcTLSClientCert: raw.GrpcTLSClientCert,
+		GrpcTLSClientKey:  raw.GrpcTLSClientKey,
 	}
 }

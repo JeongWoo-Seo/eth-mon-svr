@@ -20,12 +20,6 @@ import (
 )
 
 const (
-	caCertFile     = "../certs/ca/cert.pem"
-	clientCertFile = "../certs/client/cert.pem"
-	clientKeyFile  = "../certs/client/key.pem"
-)
-
-const (
 	gasPredictionBufferSize = 3
 	feeBucketBufferSize     = 1
 	streamReconnectDelay    = 1 * time.Second
@@ -48,7 +42,7 @@ type GasPredictionClient struct {
 	unaryRetryDelay time.Duration
 }
 
-func NewGasPredictClient(ctx context.Context, addr string, tokenManager *auth.TokenManager, enableTls bool) (*GasPredictionClient, func(), error) {
+func NewGasPredictClient(ctx context.Context, addr string, tokenManager *auth.TokenManager, enableTls bool, caCertFile, clientCertFile, clientKeyFile string) (*GasPredictionClient, func(), error) {
 	if addr == "" {
 		return nil, nil, errors.New("auth grpc server address is empty")
 	}

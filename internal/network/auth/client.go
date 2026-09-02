@@ -14,18 +14,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-const (
-	caCertFile     = "../certs/ca/cert.pem"
-	clientCertFile = "../certs/client/cert.pem"
-	clientKeyFile  = "../certs/client/key.pem"
-)
-
 type AuthGrpcClient struct {
 	client pb.AuthServiceClient
 	conn   *grpc.ClientConn
 }
 
-func NewAuthGrpcClient(addr string, enableTls bool) (*AuthGrpcClient, error) {
+func NewAuthGrpcClient(addr string, enableTls bool, caCertFile, clientCertFile, clientKeyFile string) (*AuthGrpcClient, error) {
 	if addr == "" {
 		return nil, errors.New("auth grpc server address is empty")
 	}

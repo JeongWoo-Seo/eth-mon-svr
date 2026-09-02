@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -28,9 +27,6 @@ func main() {
 	//////////////////////////
 	// load config
 	//////////////////////////
-	enableTls := flag.Bool("tls", false, "enable tls")
-	flag.Parse()
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -64,9 +60,10 @@ func main() {
 	//////////////////////////
 	// connect grpc
 	//////////////////////////
-	authGrpcClient, err := auth.NewAuthGrpcClient(cfg.GrpcServerAddr, *enableTls)
+	authGrpcClient, err := auth.NewAuthGrpcClient(cfg.GrpcServerAddr, cfg.GrpcTLSEnabled,
+		cfg.GrpcTLSCACert, cfg.GrpcTLSClientCert, cfg.GrpcTLSClientKey)
 	if err != nil {
-		logger.Error(ctx, "fail to connect auth gRPC ",
+		logger.Error(ctx, "fail to connect auth gRPC",
 			err,
 			slog.String("system", "grpc client"))
 		panic(err)
@@ -81,7 +78,8 @@ func main() {
 		panic(err)
 	}
 
-	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(ctx, cfg.GrpcServerAddr, tokenManager, *enableTls)
+	grpcClient, cleanup, err := grpcClient.NewGasPredictClient(ctx, cfg.GrpcServerAddr, tokenManager,
+		cfg.GrpcTLSEnabled, cfg.GrpcTLSCACert, cfg.GrpcTLSClientCert, cfg.GrpcTLSClientKey)
 	if err != nil {
 		logger.Error(ctx, "fail to connet gRPC ",
 			err,
